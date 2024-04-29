@@ -30,6 +30,12 @@ class AnglerBot(AresBot):
             main_army=main_army,
             target=self.enemy_start_locations[0]
         )
+        
+        self.control_attackers(
+            attackers=attackers,
+            target=self.game_info.map_center
+        )
+
 
         # at 10 seconds assign all zealots to MAIN_ARMY role
         # This will remove them from the ATTACKING automatically
@@ -42,7 +48,22 @@ class AnglerBot(AresBot):
                 self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE
                 )
             
-    
+    # Set all units with ATTACKING to Center of the map
+    def control_attackers(self, attackers: Units, target: Point2) -> None:
+        group_maneuver: CombatManeuver = CombatManeuver()
+        target: self.enemy_start_locations[0]
+        #add group behaviors
+        #hold position for the first 10 seoconds then attack
+        if self.time > 10.0:
+            group_maneuver.add(
+                AMoveGroup(
+                    group=attackers,
+                    group_tags={r.tag for r in attackers},
+                    target=target,
+                )
+            )
+            self.register_behavior(group_maneuver)
+
     def control_main_army(self, main_army: Units, target: Point2) -> None:
         #declare a new group maneuver
         group_maneuver: CombatManeuver = CombatManeuver()
@@ -57,43 +78,12 @@ class AnglerBot(AresBot):
         )
         self.register_behavior(group_maneuver)
     
+
+
     async def on_unit_created(self, unit: Unit) -> None:
         await super(AnglerBot, self).on_unit_created(unit)
         #if a zealot is created assign it to the attacking role
-        if unit.type_id == UnitTypeId.ZEALOT:
+        if unit.type_id == UnitTypeId.ZEALOT or unit.type_id == UnitTypeId.STALKER:
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
 
-
-    """
-    Can use `python-sc2` hooks as usual, but make a call the inherited method in the superclass
-    Examples:
-    """
-    # async def on_start(self) -> None:
-    #     await super(MyBot, self).on_start()
-    #
-    #     # on_start logic here ...
-    #
-    # async def on_end(self, game_result: Result) -> None:
-    #     await super(MyBot, self).on_end(game_result)
-    #
-    #     # custom on_end logic here ...
-    #
-    # async def on_building_construction_complete(self, unit: Unit) -> None:
-    #     await super(MyBot, self).on_building_construction_complete(unit)
-    #
-    #     # custom on_building_construction_complete logic here ...
-    #
-    # async def on_unit_created(self, unit: Unit) -> None:
-    #     await super(MyBot, self).on_unit_created(unit)
-    #
-    #     # custom on_unit_created logic here ...
-    #
-    # async def on_unit_destroyed(self, unit_tag: int) -> None:
-    #     await super(MyBot, self).on_unit_destroyed(unit_tag)
-    #
-    #     # custom on_unit_destroyed logic here ...
-    #
-    # async def on_unit_took_damage(self, unit: Unit, amount_damage_taken: float) -> None:
-    #     await super(MyBot, self).on_unit_took_damage(unit, amount_damage_taken)
-    #
-    #     # custom on_unit_took_damage logic here ...
+    

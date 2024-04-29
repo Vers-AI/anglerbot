@@ -26,11 +26,11 @@ class AnglerBot(AresBot):
         #retrieve main army if one has been assigned
         main_army: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
 
-        """self.control_main_army(
+        self.control_main_army(
             main_army=main_army,
             target=self.enemy_start_locations[0]
         )
-"""
+
         # at 10 seconds assign all zealots to MAIN_ARMY role
         # This will remove them from the ATTACKING automatically
         if not self._assigned_main_army and self.time > 2.0:
@@ -43,9 +43,10 @@ class AnglerBot(AresBot):
                 )
             
     
-    """def control_main_army(self, main_army: Units, target: Point2) -> None:
+    def control_main_army(self, main_army: Units, target: Point2) -> None:
         #declare a new group maneuver
         group_maneuver: CombatManeuver = CombatManeuver()
+        target: self.enemy_start_locations[0]
         #add group behaviors
         group_maneuver.add(
             AMoveGroup(
@@ -53,9 +54,16 @@ class AnglerBot(AresBot):
                 group_tags={r.tag for r in main_army},
                 target=target
             )
-        )"""
-
+        )
+        self.register_behavior(group_maneuver)
     
+    async def on_unit_created(self, unit: Unit) -> None:
+        await super(AnglerBot, self).on_unit_created(unit)
+        #if a zealot is created assign it to the attacking role
+        if unit.type_id == UnitTypeId.ZEALOT:
+            self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
+
+
     """
     Can use `python-sc2` hooks as usual, but make a call the inherited method in the superclass
     Examples:

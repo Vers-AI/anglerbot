@@ -20,6 +20,7 @@ class AnglerBot(AresBot):
         super().__init__(game_step_override)
 
         self._assigned_scout: bool = False
+        self._assigned_range: bool = False
 
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
@@ -29,8 +30,11 @@ class AnglerBot(AresBot):
     
         #retrieve main army if one has been assigned
         first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
+        range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
         self.pylon = self.structures(UnitTypeId.PYLON)
         ground_grid = self.mediator.get_ground_grid
+        enemy_units: Units = self.enemy_units
+
 
 
         self.control_scout(
@@ -41,6 +45,11 @@ class AnglerBot(AresBot):
         self.control_attackers(
             attackers=attacker,
             target=self.enemy_start_locations[0]
+        )
+
+        self.control_range_attack(
+            range_attack=range_attack,
+            target=self.enemy_start_locations[0], enemy_units=enemy_units, ground_grid=ground_grid
         )
         
 
@@ -53,7 +62,16 @@ class AnglerBot(AresBot):
             if zealots:
                 zealot = zealots.random
                 self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
-            
+
+        # at the start assign  all the stalkers to the range attack role
+        if not self._assigned_range and self.time > 2.0:
+            self._assigned_range = True
+            stalkers: Units = attacker(UnitTypeId.STALKER)
+            if stalkers:
+                for stalker in stalkers:
+                    self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
+
+
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units, target: Point2) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
@@ -70,7 +88,32 @@ class AnglerBot(AresBot):
             )
             self.register_behavior(group_maneuver)
         
-        
+    # Group Behavior for range attackers
+    def control_range_attack(self, range_attack: Units, target: Point2, enemy_units:Units, ground_grid: np.ndarray) -> None:
+        group_maneuver: CombatManeuver = CombatManeuver()
+        target: self.enemy_start_locations[0]
+        #hold position for the first 20 seoconds, then attack enemy start location unless there is an enemy then stutter back 
+        if self.time > 20.0 and not self.enemy_units:
+            group_maneuver.add(
+                AMoveGroup(
+                    group=range_attack,
+                    group_tags={r.tag for r in range_attack},
+                    target=target,
+                )
+            )
+        elif self.enemy_units:
+            
+            closest_enemy: Units = self.mediator.get_units_in_range(start_points=[squad_position],distances=15.5,query_tree=UnitTreeQueryType.EnemyGround,)[0]
+            group_maneuver.add(
+                StutterGroupBack(
+                    group=range_attack,
+                    group_tags={r.tag for r in range_attack},
+                    target=target, 
+                    group_position=closest_enemy.position, 
+                    grid=ground_grid
+                )
+            )
+        self.register_behavior(group_maneuver)
         
 
     def control_scout(self, first_scout: Units, target: Point2) -> None:
@@ -101,5 +144,7 @@ class AnglerBot(AresBot):
         #if a zealot is created assign it to the attacking role
         if unit.type_id == UnitTypeId.ZEALOT or unit.type_id == UnitTypeId.STALKER:
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
+        
+        
 
     

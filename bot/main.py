@@ -1,11 +1,11 @@
 from typing import Optional
 
 from ares import AresBot
-from ares.consts import UnitRole, ALL_STRUCTURES
+from ares.consts import UnitRole, UnitTreeQueryType
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.group import AMoveGroup, PathGroupToTarget, StutterGroupBack
+from ares.behaviors.combat.group import AMoveGroup, StutterGroupForward
+from ares.managers.squad_manager import UnitSquad
 
-from cython_extensions import cy_closest_to, cy_distance_to
 
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
@@ -49,14 +49,15 @@ class AnglerBot(AresBot):
 
         self.control_range_attack(
             range_attack=range_attack,
-            target=self.enemy_start_locations[0], enemy_units=enemy_units, ground_grid=ground_grid
+            target=self.enemy_start_locations[0],
+            ground_grid=ground_grid
         )
         
 
 
         # at the start assign 1 random zealot to the scout role
         # This will remove them from the ATTACKING automatically
-        if not self._assigned_scout and self.time > 2.0:
+        if not self._assigned_scout and self.time > 1.0:
             self._assigned_scout = True
             zealots: Units = attacker(UnitTypeId.ZEALOT)
             if zealots:
@@ -64,7 +65,7 @@ class AnglerBot(AresBot):
                 self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
 
         # at the start assign  all the stalkers to the range attack role
-        if not self._assigned_range and self.time > 2.0:
+        if not self._assigned_range and self.time > 1.0:
             self._assigned_range = True
             stalkers: Units = attacker(UnitTypeId.STALKER)
             if stalkers:
@@ -78,7 +79,7 @@ class AnglerBot(AresBot):
         target: self.enemy_start_locations[0]
         #add group behaviors
         #hold position for the first 10 seoconds then attack
-        if self.time > 20.0:
+        if self.time > 5.0:
             group_maneuver.add(
                 AMoveGroup(
                     group=attackers,
@@ -89,31 +90,45 @@ class AnglerBot(AresBot):
             self.register_behavior(group_maneuver)
         
     # Group Behavior for range attackers
-    def control_range_attack(self, range_attack: Units, target: Point2, enemy_units:Units, ground_grid: np.ndarray) -> None:
+    def control_range_attack(self, range_attack: Units, target: Point2, ground_grid: np.ndarray) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
-        target: self.enemy_start_locations[0]
-        #hold position for the first 20 seoconds, then attack enemy start location unless there is an enemy then stutter back 
-        if self.time > 20.0 and not self.enemy_units:
-            group_maneuver.add(
-                AMoveGroup(
-                    group=range_attack,
-                    group_tags={r.tag for r in range_attack},
-                    target=target,
-                )
-            )
-        elif self.enemy_units:
+        squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.CONTROL_GROUP_TWO, squad_radius=9.0)
+        
+        for squad in squads:
+            squad_position: Point2 = squad.squad_position
+            units: list[Unit] = squad.squad_units
+            squad_tags: set[int] = squad.tags
+        
+            # retreive close enemy to the range stalker squad
+            close_ground_enemy: Units = self.mediator.get_units_in_range(
+                start_points=[squad_position],
+                distances=11.5,
+                query_tree=UnitTreeQueryType.EnemyGround,
+            )[0]
+
+            squad_position: Point2 = squad.squad_position
             
-            closest_enemy: Units = self.mediator.get_units_in_range(start_points=[squad_position],distances=15.5,query_tree=UnitTreeQueryType.EnemyGround,)[0]
-            group_maneuver.add(
-                StutterGroupBack(
-                    group=range_attack,
-                    group_tags={r.tag for r in range_attack},
-                    target=target, 
-                    group_position=closest_enemy.position, 
-                    grid=ground_grid
+
+            #hold position for the first 20 seoconds, then attack enemy start location unless there is an enemy then stutter back 
+            if self.time > 5.0:
+                group_maneuver.add(
+                    AMoveGroup(
+                        group=range_attack,
+                        group_tags={r.tag for r in range_attack},
+                        target=target,
+                    )
                 )
-            )
-        self.register_behavior(group_maneuver)
+            if self.enemy_units:
+                group_maneuver.add(
+                    StutterGroupForward(
+                        group=units,
+                        group_tags=squad_tags,
+                        group_position=squad_position,
+                        target=target,
+                        enemies=close_ground_enemy,
+                    )
+                )
+            self.register_behavior(group_maneuver)
         
 
     def control_scout(self, first_scout: Units, target: Point2) -> None:

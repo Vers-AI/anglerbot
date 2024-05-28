@@ -3,7 +3,7 @@ from typing import Optional
 from ares import AresBot
 from ares.consts import UnitRole, UnitTreeQueryType
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.group import AMoveGroup, StutterGroupForward
+from ares.behaviors.combat.group import AMoveGroup, StutterGroupBack
 from ares.managers.squad_manager import UnitSquad
 
 
@@ -94,18 +94,21 @@ class AnglerBot(AresBot):
         group_maneuver: CombatManeuver = CombatManeuver()
         squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.CONTROL_GROUP_TWO, squad_radius=9.0)
         
+
+
         for squad in squads:
             squad_position: Point2 = squad.squad_position
             units: list[Unit] = squad.squad_units
             squad_tags: set[int] = squad.tags
-        
+            
             # retreive close enemy to the range stalker squad
             close_ground_enemy: Units = self.mediator.get_units_in_range(
                 start_points=[squad_position],
                 distances=11.5,
                 query_tree=UnitTreeQueryType.EnemyGround,
             )[0]
-
+            
+            target_unit = close_ground_enemy[0] if close_ground_enemy else None
             squad_position: Point2 = squad.squad_position
             
 
@@ -120,12 +123,12 @@ class AnglerBot(AresBot):
                 )
             if self.enemy_units:
                 group_maneuver.add(
-                    StutterGroupForward(
+                    StutterGroupBack(
                         group=units,
                         group_tags=squad_tags,
                         group_position=squad_position,
-                        target=target,
-                        enemies=close_ground_enemy,
+                        target=target_unit,
+                        grid=ground_grid,
                     )
                 )
             self.register_behavior(group_maneuver)

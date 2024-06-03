@@ -39,7 +39,7 @@ class AnglerBot(AresBot):
 
         self.control_scout(
             first_scout=first_scout,
-            target=self.game_info.map_center,
+            target=self.enemy_start_locations[0]
         )
         
         self.control_attackers(
@@ -139,9 +139,15 @@ class AnglerBot(AresBot):
         group_maneuver: CombatManeuver = CombatManeuver()
        
         #move scout to the center of the map the map if there is no enemy at the start of the game
+    
         if not self.enemy_units and self.time < 20.0:
             target = self.game_info.map_center
-            
+        
+        # Fix this logic to make the scout react when it sees an enemy
+        # elif self.enemy_units and self.time < 20.0:
+        #    target = self.start_location.position  # Not the permenant location, just a placeholder
+        #    print(target)
+        
         else:
             target = self.enemy_start_locations[0]
         

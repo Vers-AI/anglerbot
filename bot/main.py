@@ -112,16 +112,8 @@ class AnglerBot(AresBot):
             squad_position: Point2 = squad.squad_position
             
 
-            #hold position for the first 20 seoconds, then attack enemy start location unless there is an enemy then stutter back 
-            if self.time > 5.0:
-                group_maneuver.add(
-                    AMoveGroup(
-                        group=range_attack,
-                        group_tags={r.tag for r in range_attack},
-                        target=target,
-                    )
-                )
-            if self.enemy_units:
+            #hold position for the first 20 seconds, then attack enemy start location unless there is an enemy then stutter back 
+            if target_unit:
                 group_maneuver.add(
                     StutterGroupBack(
                         group=units,
@@ -129,6 +121,14 @@ class AnglerBot(AresBot):
                         group_position=squad_position,
                         target=target_unit,
                         grid=ground_grid,
+                    )
+                )
+            elif self.time > 5.0:
+                group_maneuver.add(
+                    AMoveGroup(
+                        group=range_attack,
+                        group_tags={r.tag for r in range_attack},
+                        target=target,
                     )
                 )
             self.register_behavior(group_maneuver)

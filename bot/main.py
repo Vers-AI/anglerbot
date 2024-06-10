@@ -21,9 +21,34 @@ class AnglerBot(AresBot):
 
         self._assigned_scout: bool = False
         self._assigned_range: bool = False
+        self.defence_postion: Point2 = None
+        self.arrive: bool = False
+ 
+    def delayed_start(self):
+        if len(self.pylon) == 0:
+            print("No pylon found")
+            return
+        print(self.game_info.map_center)
+        # check what map the bot is playing on
+        if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
+            # find out which side of the map we are on.
+            if self.game_info.map_center.x > self.pylon[0].position.x:
+                print("Starting on the left")
+                self.defence_postion = Point2((34,26))
+            else:
+                print("Starting on the right")
+                self.defence_postion = Point2((38,26))
+        else:
+            print("The maps is BotMicroArena_6:", self.game_info.local_map_path)
+
 
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
+        self.pylon = self.structures(UnitTypeId.PYLON)
+        self.check_defensive_position()
+
+        if self.defence_postion is None:
+            self.delayed_start()
         
         #retrieve all attacking units
         attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
@@ -31,25 +56,28 @@ class AnglerBot(AresBot):
         #retrieve main army if one has been assigned
         first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
         range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
-        self.pylon = self.structures(UnitTypeId.PYLON)
+
         ground_grid = self.mediator.get_ground_grid
         enemy_units: Units = self.enemy_units
 
+        current_target: Point2 = self.defence_postion
+        if self.arrive:
+            current_target = self.enemy_start_locations[0]
 
 
         self.control_scout(
             first_scout=first_scout,
-            target=self.enemy_start_locations[0]
+            target=current_target
         )
         
         self.control_attackers(
             attackers=attacker,
-            target=self.enemy_start_locations[0]
+            target=current_target
         )
 
         self.control_range_attack(
             range_attack=range_attack,
-            target=self.enemy_start_locations[0],
+            target=current_target,
             ground_grid=ground_grid
         )
         
@@ -76,7 +104,6 @@ class AnglerBot(AresBot):
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units, target: Point2) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
-        target: self.enemy_start_locations[0]
         #add group behaviors
         #hold position for the first 10 seoconds then attack
         if self.time > 5.0:
@@ -169,6 +196,17 @@ class AnglerBot(AresBot):
         if unit.type_id == UnitTypeId.ZEALOT or unit.type_id == UnitTypeId.STALKER:
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
         
-        
+    def check_defensive_position(self):
+        if self.arrive:
+            return
+        if not self.enemy_units:
+            return
+        # check the nearest unit to the defensive_position
+        if self.defence_postion:
+            closest_unit: Unit = self.units.closest_to(self.defence_postion)
+            if closest_unit:
+                if closest_unit.distance_to(self.defence_postion) < 2:
+                    self.arrive = True
+             
 
     

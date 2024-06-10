@@ -70,7 +70,7 @@ def main():
         # Local game
         map_list: List[str] = [
              "PlateauMicro_1",
-             "BotMicroArena_6",
+             """BotMicroArena_6","""
         ]
         
 

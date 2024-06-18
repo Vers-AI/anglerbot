@@ -22,6 +22,7 @@ class AnglerBot(AresBot):
         self._assigned_scout: bool = False
         self._assigned_range: bool = False
         self.defence_postion: Point2 = None
+        self.defence_stalker_position: Point2 = None
         self.arrive: bool = False
  
     def delayed_start(self):
@@ -40,12 +41,21 @@ class AnglerBot(AresBot):
                 self.defence_postion = Point2((38,26))
         else:
             print("The maps is BotMicroArena_6:", self.game_info.local_map_path)
-
+            if self.game_info.map_center.x > self.pylon[0].position.x:
+                print("Starting on the left")
+                self.defence_postion = Point2((34,36))
+                self.defence_stalker_position = Point2((34,34))
+            else:
+                print("Starting on the right")
+                self.defence_postion = Point2((38,36))
+                self.defence_stalker_position = Point2((38,34))
 
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
         self.pylon = self.structures(UnitTypeId.PYLON)
         self.check_defensive_position()
+        enemy_units: Units = self.enemy_units
+        self.unit_scores = self.calculate_scores(enemy_units)
 
         if self.defence_postion is None:
             self.delayed_start()
@@ -58,7 +68,7 @@ class AnglerBot(AresBot):
         range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
 
         ground_grid = self.mediator.get_ground_grid
-        enemy_units: Units = self.enemy_units
+        
 
         current_target: Point2 = self.defence_postion
         if self.arrive:
@@ -99,7 +109,13 @@ class AnglerBot(AresBot):
             if stalkers:
                 for stalker in stalkers:
                     self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
-
+    
+    def calculate_scores(self, units: Units):
+        scores = {}
+        for unit in units:
+            missing_health_percent = (unit.health_max - unit.health) / unit.health_max
+            scores[unit.tag] = 100 - missing_health_percent
+        return scores
 
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units, target: Point2) -> None:
@@ -115,18 +131,22 @@ class AnglerBot(AresBot):
                 )
             )
             self.register_behavior(group_maneuver)
+    
         
     # Group Behavior for range attackers
     def control_range_attack(self, range_attack: Units, target: Point2, ground_grid: np.ndarray) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
         squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.CONTROL_GROUP_TWO, squad_radius=9.0)
         
-
+        
 
         for squad in squads:
             squad_position: Point2 = squad.squad_position
             units: list[Unit] = squad.squad_units
             squad_tags: set[int] = squad.tags
+            
+            if len(units) == 0:
+                continue
             
             # retreive close enemy to the range stalker squad
             close_ground_enemy: Units = self.mediator.get_units_in_range(
@@ -137,20 +157,23 @@ class AnglerBot(AresBot):
             
             target_unit = close_ground_enemy[0] if close_ground_enemy else None
             squad_position: Point2 = squad.squad_position
-            
 
+            if len(self.enemy_units) > 0:
+                target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
+                print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
+            
             #hold position for the first 20 seconds, then attack enemy start location unless there is an enemy then stutter back 
             if target_unit:
                 group_maneuver.add(
-                    StutterGroupBack(
+                    AMoveGroup(
                         group=units,
                         group_tags=squad_tags,
-                        group_position=squad_position,
-                        target=target_unit,
-                        grid=ground_grid,
+                        # group_position=squad_position,
+                        target=target_unit.position,
+                        # grid=ground_grid,
                     )
                 )
-            elif self.time > 5.0:
+            elif self.time > 1.0:
                 group_maneuver.add(
                     AMoveGroup(
                         group=range_attack,

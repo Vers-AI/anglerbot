@@ -12,6 +12,8 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
 
+from cython_extensions import cy_attack_ready, cy_pick_enemy_target, cy_in_attack_range
+
 import numpy as np
 
 class AnglerBot(AresBot):
@@ -24,8 +26,13 @@ class AnglerBot(AresBot):
         self.defence_postion: Point2 = None
         self.defence_stalker_position: Point2 = None
         self.arrive: bool = False
- 
+
+
     def delayed_start(self):
+        self.full_attack: bool = False
+
+
+
         if len(self.pylon) == 0:
             print("No pylon found")
             return
@@ -71,6 +78,8 @@ class AnglerBot(AresBot):
         
 
         current_target: Point2 = self.defence_postion
+        
+        # TODO - add logic with flag to switch to enemy start location
         if self.arrive:
             current_target = self.enemy_start_locations[0]
 
@@ -122,6 +131,8 @@ class AnglerBot(AresBot):
         group_maneuver: CombatManeuver = CombatManeuver()
         #add group behaviors
         #hold position for the first 10 seoconds then attack
+
+        
         if self.time > 5.0:
             group_maneuver.add(
                 AMoveGroup(
@@ -135,6 +146,7 @@ class AnglerBot(AresBot):
         
     # Group Behavior for range attackers
     def control_range_attack(self, range_attack: Units, target: Point2, ground_grid: np.ndarray) -> None:
+        
         group_maneuver: CombatManeuver = CombatManeuver()
         squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.CONTROL_GROUP_TWO, squad_radius=9.0)
         
@@ -164,6 +176,18 @@ class AnglerBot(AresBot):
             
             #hold position for the first 20 seconds, then attack enemy start location unless there is an enemy then stutter back 
             if target_unit:
+                """# stutter back if target_unit is in range and ready to attack unit
+                if cy_attack_ready(self, squad, target_unit):
+                    group_maneuver.add(
+                        StutterGroupBack(
+                            group=units,
+                            group_tags=squad_tags,
+                            group_position=squad_position,
+                            target=target_unit.position,
+                            grid=ground_grid,
+                        )
+                    )
+                else:"""
                 group_maneuver.add(
                     AMoveGroup(
                         group=units,

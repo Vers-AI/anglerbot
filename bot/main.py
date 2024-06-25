@@ -30,6 +30,7 @@ class AnglerBot(AresBot):
 
     def delayed_start(self):
         self.full_attack: bool = False
+        self.enemy_supply: int = -1 # track enemy supply
 
 
 
@@ -67,6 +68,11 @@ class AnglerBot(AresBot):
         if self.defence_postion is None:
             self.delayed_start()
         
+        # TODO - Fix Logic of when last enemy dies ( it doesn't update when no enemies on screen leave 2 supply)
+        if enemy_units:
+            self.enemy_supply = self.get_total_supply(enemy_units)
+            print("Enemy Supply: ", self.enemy_supply)
+
         #retrieve all attacking units
         attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
     
@@ -79,9 +85,12 @@ class AnglerBot(AresBot):
 
         current_target: Point2 = self.defence_postion
         
-        # TODO - add logic with flag to switch to enemy start location
-        if self.arrive:
+        
+        # if enemy supply is 0
+        if self.enemy_supply == 0:
+            self.full_attack = True
             current_target = self.enemy_start_locations[0]
+            print("Switching to enemy start location")
 
 
         self.control_scout(
@@ -100,7 +109,7 @@ class AnglerBot(AresBot):
             ground_grid=ground_grid
         )
         
-
+        
 
         # at the start assign 1 random zealot to the scout role
         # This will remove them from the ATTACKING automatically
@@ -129,19 +138,48 @@ class AnglerBot(AresBot):
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units, target: Point2) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
-        #add group behaviors
-        #hold position for the first 10 seoconds then attack
+        squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.ATTACKING, squad_radius=9.0)
 
-        
-        if self.time > 5.0:
-            group_maneuver.add(
-                AMoveGroup(
-                    group=attackers,
-                    group_tags={r.tag for r in attackers},
-                    target=target,
+        for squad in squads:
+            squad_position: Point2 = squad.squad_position
+            units: list[Unit] = squad.squad_units
+            squad_tags: set[int] = squad.tags
+
+            if len(units) == 0:
+                continue
+
+            # retreive close enemy to the attacking squad
+            close_ground_enemy: Units = self.mediator.get_units_in_range(
+                start_points=[squad_position],
+                distances=2,
+                query_tree=UnitTreeQueryType.EnemyGround,
+            )[0]
+
+            target_unit = close_ground_enemy[0] if close_ground_enemy else None
+            squad_position: Point2 = squad.squad_position
+
+            if len(self.enemy_units) > 0:
+                target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
+                print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
+
+            # if target unit is range, attack
+            if target_unit:
+                group_maneuver.add(
+                    AMoveGroup(
+                        group=units,
+                        group_tags=squad_tags,
+                        target=target_unit.position,
+                    )
                 )
-            )
-            self.register_behavior(group_maneuver)
+            else:
+                group_maneuver.add(
+                    AMoveGroup(
+                        group=units,
+                        group_tags=squad_tags,
+                        target=target.position,
+                    )
+                )
+        self.register_behavior(group_maneuver)
     
         
     # Group Behavior for range attackers
@@ -251,6 +289,10 @@ class AnglerBot(AresBot):
             if closest_unit:
                 if closest_unit.distance_to(self.defence_postion) < 2:
                     self.arrive = True
+    
+    
+    
+    
              
 
     

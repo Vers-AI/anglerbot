@@ -3,7 +3,8 @@ from typing import Optional
 from ares import AresBot
 from ares.consts import UnitRole, UnitTreeQueryType
 from ares.behaviors.combat import CombatManeuver
-from ares.behaviors.combat.group import AMoveGroup, StutterGroupBack
+from ares.behaviors.combat.group import AMoveGroup, PathGroupToTarget
+from ares.behaviors.combat.individual import AMove, StutterUnitBack
 from ares.managers.squad_manager import UnitSquad
 
 
@@ -26,6 +27,7 @@ class AnglerBot(AresBot):
         self.defence_postion: Point2 = None
         self.defence_stalker_position: Point2 = None
         self.arrive: bool = False
+        self.combat_started = False
 
 
     def delayed_start(self):
@@ -68,10 +70,11 @@ class AnglerBot(AresBot):
         if self.defence_postion is None:
             self.delayed_start()
         
-        # TODO - Fix Logic of when last enemy dies ( it doesn't update when no enemies on screen leave 2 supply)
         if enemy_units:
+            self.combat_started = True
             self.enemy_supply = self.get_total_supply(enemy_units)
-            print("Enemy Supply: ", self.enemy_supply)
+        else:
+            self.enemy_supply = 0
 
         #retrieve all attacking units
         attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
@@ -87,10 +90,9 @@ class AnglerBot(AresBot):
         
         
         # if enemy supply is 0
-        if self.enemy_supply == 0:
+        if self.enemy_supply == 0 and self.combat_started:
             self.full_attack = True
             current_target = self.enemy_start_locations[0]
-            print("Switching to enemy start location")
 
 
         self.control_scout(
@@ -212,6 +214,8 @@ class AnglerBot(AresBot):
                 target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
                 print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
             
+
+
             #hold position for the first 20 seconds, then attack enemy start location unless there is an enemy then stutter back 
             if target_unit:
                 """# stutter back if target_unit is in range and ready to attack unit

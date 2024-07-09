@@ -4,7 +4,7 @@ from ares import AresBot
 from ares.consts import UnitRole, UnitTreeQueryType
 from ares.behaviors.combat import CombatManeuver
 from ares.behaviors.combat.group import AMoveGroup, PathGroupToTarget
-from ares.behaviors.combat.individual import AMove, StutterUnitBack
+from ares.behaviors.combat.individual import AMove, StutterUnitBack, KeepUnitSafe
 from ares.managers.squad_manager import UnitSquad
 
 
@@ -81,7 +81,7 @@ class AnglerBot(AresBot):
     
         #retrieve main army if one has been assigned
         first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
-        range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
+        # range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
 
         ground_grid = self.mediator.get_ground_grid
         
@@ -105,11 +105,11 @@ class AnglerBot(AresBot):
             target=current_target
         )
 
-        self.control_range_attack(
-            range_attack=range_attack,
-            target=current_target,
-            ground_grid=ground_grid
-        )
+        # self.control_range_attack(
+        #     range_attack=range_attack,
+        #     target=current_target,
+        #     ground_grid=ground_grid
+        # )
         
         
 
@@ -123,12 +123,12 @@ class AnglerBot(AresBot):
                 self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
 
         # at the start assign  all the stalkers to the range attack role
-        if not self._assigned_range and self.time > 1.0:
-            self._assigned_range = True
-            stalkers: Units = attacker(UnitTypeId.STALKER)
-            if stalkers:
-                for stalker in stalkers:
-                    self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
+        # if not self._assigned_range and self.time > 1.0:
+        #     self._assigned_range = True
+        #     stalkers: Units = attacker(UnitTypeId.STALKER)
+        #     if stalkers:
+        #         for stalker in stalkers:
+        #             self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
     
     def calculate_scores(self, units: Units):
         scores = {}
@@ -141,7 +141,10 @@ class AnglerBot(AresBot):
     def control_attackers(self, attackers: Units, target: Point2) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
         squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.ATTACKING, squad_radius=9.0)
+        grid: np.ndarray = self.mediator.get_ground_grid
+    
 
+        # TODO - Fix units not attack outside of range
         for squad in squads:
             squad_position: Point2 = squad.squad_position
             units: list[Unit] = squad.squad_units
@@ -151,28 +154,55 @@ class AnglerBot(AresBot):
                 continue
 
             # retreive close enemy to the attacking squad
-            close_ground_enemy: Units = self.mediator.get_units_in_range(
-                start_points=[squad_position],
-                distances=2,
-                query_tree=UnitTreeQueryType.EnemyGround,
-            )[0]
+            # close_ground_enemy: Units = self.mediator.get_units_in_range(
+            #     start_points=[squad_position],
+            #     distances=3,
+            #     query_tree=UnitTreeQueryType.EnemyGround,
+            # )[0]
+            close_ground_enemy = self.enemy_units
 
             target_unit = close_ground_enemy[0] if close_ground_enemy else None
             squad_position: Point2 = squad.squad_position
 
-            if len(self.enemy_units) > 0:
-                target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
-                print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
+            # if len(self.enemy_units) > 0:
+            #     target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
+            #     print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
 
-            # if target unit is range, attack
-            if target_unit:
-                group_maneuver.add(
-                    AMoveGroup(
-                        group=units,
-                        group_tags=squad_tags,
-                        target=target_unit.position,
+            if close_ground_enemy:
+                melee: list[Unit] = [u for u in units if u.ground_range <= 3]
+                ranged: list[Unit] = [u for u in units if u.ground_range > 3]
+                melee_tags: list[int] = [u.tag for u in melee]
+                if ranged:
+                    ranged_maneuver = CombatManeuver()
+                    for unit in ranged:
+                        target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
+                        if unit.shield_percentage < 0.3 and unit.weapon_cooldown != 0:
+                            ranged_maneuver.add(
+                                KeepUnitSafe(unit, grid)
+                            )
+                            self.register_behavior(ranged_maneuver)
+                        else:
+                            if target_unit:
+                                ranged_maneuver.add(
+                                    AMove(unit, target_unit)
+                                )
+                            else:
+                                ranged_maneuver.add(
+                                    AMove(unit, target.position)
+                                )
+                            self.register_behavior(ranged_maneuver)
+
+                if melee:
+                    target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]
+                    melee_maneuver = CombatManeuver()
+                    group_maneuver.add(
+                        AMoveGroup(
+                            group=melee,
+                            group_tags=melee_tags,
+                            target=target_unit.position,
+                        )
                     )
-                )
+                    self.register_behavior(melee_maneuver)
             else:
                 group_maneuver.add(
                     AMoveGroup(
@@ -181,7 +211,7 @@ class AnglerBot(AresBot):
                         target=target.position,
                     )
                 )
-        self.register_behavior(group_maneuver)
+                self.register_behavior(group_maneuver)
     
         
     # Group Behavior for range attackers

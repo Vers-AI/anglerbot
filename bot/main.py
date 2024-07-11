@@ -172,15 +172,14 @@ class AnglerBot(AresBot):
                 melee: list[Unit] = [u for u in units if u.ground_range <= 3]
                 ranged: list[Unit] = [u for u in units if u.ground_range > 3]
                 melee_tags: list[int] = [u.tag for u in melee]
-                if ranged:
-                    ranged_maneuver = CombatManeuver()
+                if ranged:   
                     for unit in ranged:
+                        ranged_maneuver = CombatManeuver()
                         target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
                         if unit.shield_percentage < 0.3 and unit.weapon_cooldown != 0:
                             ranged_maneuver.add(
                                 KeepUnitSafe(unit, grid)
                             )
-                            self.register_behavior(ranged_maneuver)
                         else:
                             if target_unit:
                                 ranged_maneuver.add(
@@ -190,7 +189,7 @@ class AnglerBot(AresBot):
                                 ranged_maneuver.add(
                                     AMove(unit, target.position)
                                 )
-                            self.register_behavior(ranged_maneuver)
+                        self.register_behavior(ranged_maneuver)
 
                 if melee:
                     target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]

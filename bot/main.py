@@ -26,8 +26,11 @@ class AnglerBot(AresBot):
         self._assigned_range: bool = False
         self.defence_postion: Point2 = None
         self.defence_stalker_position: Point2 = None
+       
+        ## Flags
         self.arrive: bool = False
         self.combat_started = False
+        self.defense_mode = False
 
 
     def delayed_start(self):
@@ -37,7 +40,7 @@ class AnglerBot(AresBot):
 
 
         if len(self.pylon) == 0:
-            print("No pylon found")
+            # print("No pylon found")
             return
         print(self.game_info.map_center)
         # check what map the bot is playing on
@@ -105,13 +108,7 @@ class AnglerBot(AresBot):
             target=current_target
         )
 
-        # self.control_range_attack(
-        #     range_attack=range_attack,
-        #     target=current_target,
-        #     ground_grid=ground_grid
-        # )
-        
-        
+       
 
         # at the start assign 1 random zealot to the scout role
         # This will remove them from the ATTACKING automatically
@@ -130,6 +127,18 @@ class AnglerBot(AresBot):
         #         for stalker in stalkers:
         #             self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
     
+        ### Pylon Defense
+        # TODO Finish Pylon Defense
+        if self.pylon:
+            proximity_ground_enemy: Units = self.mediator.get_units_in_range(
+                        start_points=[self.pylon[0].position],
+                        distances= 8.0,
+                        query_tree=UnitTreeQueryType.EnemyGround,
+                        return_as_dict=False,
+                    )[0].filter(lambda u: not u.is_memory)
+    
+            if proximity_ground_enemy:
+                print("Defending Pylon")
     def calculate_scores(self, units: Units):
         scores = {}
         for unit in units:
@@ -144,7 +153,6 @@ class AnglerBot(AresBot):
         grid: np.ndarray = self.mediator.get_ground_grid
     
 
-        # TODO - Fix units not attack outside of range
         for squad in squads:
             squad_position: Point2 = squad.squad_position
             units: list[Unit] = squad.squad_units
@@ -154,15 +162,10 @@ class AnglerBot(AresBot):
                 continue
 
             # retreive close enemy to the attacking squad
-            # close_ground_enemy: Units = self.mediator.get_units_in_range(
-            #     start_points=[squad_position],
-            #     distances=3,
-            #     query_tree=UnitTreeQueryType.EnemyGround,
-            # )[0]
             close_ground_enemy: Units = self.mediator.get_units_in_range(
                     start_points=[squad_position],
                     distances=15,
-                    query_tree=UnitTreeQueryType.AllEnemy,
+                    query_tree=UnitTreeQueryType.EnemyGround,
                     return_as_dict=False,
                 )[0].filter(lambda u: not u.is_memory and not u.is_structure)
 

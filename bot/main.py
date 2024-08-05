@@ -140,7 +140,7 @@ class AnglerBot(AresBot):
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units, target: Point2) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
-        squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.ATTACKING, squad_radius=9.0)
+        squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.ATTACKING, squad_radius=12.0)
         grid: np.ndarray = self.mediator.get_ground_grid
     
 
@@ -159,7 +159,12 @@ class AnglerBot(AresBot):
             #     distances=3,
             #     query_tree=UnitTreeQueryType.EnemyGround,
             # )[0]
-            close_ground_enemy = self.enemy_units
+            close_ground_enemy: Units = self.mediator.get_units_in_range(
+                    start_points=[squad_position],
+                    distances=15,
+                    query_tree=UnitTreeQueryType.AllEnemy,
+                    return_as_dict=False,
+                )[0].filter(lambda u: not u.is_memory and not u.is_structure)
 
             target_unit = close_ground_enemy[0] if close_ground_enemy else None
             squad_position: Point2 = squad.squad_position
@@ -176,19 +181,12 @@ class AnglerBot(AresBot):
                     for unit in ranged:
                         ranged_maneuver = CombatManeuver()
                         target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
-                        if unit.shield_percentage < 0.3 and unit.weapon_cooldown != 0:
+                        if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
                             ranged_maneuver.add(
                                 KeepUnitSafe(unit, grid)
                             )
                         else:
-                            if target_unit:
-                                ranged_maneuver.add(
-                                    AMove(unit, target_unit)
-                                )
-                            else:
-                                ranged_maneuver.add(
-                                    AMove(unit, target.position)
-                                )
+                            ranged_maneuver.add(StutterUnitBack(unit=unit, target=target_unit, grid=grid))
                         self.register_behavior(ranged_maneuver)
 
                 if melee:

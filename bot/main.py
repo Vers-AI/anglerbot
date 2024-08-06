@@ -92,8 +92,10 @@ class AnglerBot(AresBot):
         current_target: Point2 = self.defence_postion
         
         
-        # if enemy supply is 0
-        if self.enemy_supply == 0 and self.combat_started:
+        # defend the pylone if we're under attack and if not and no enemies are around attack start location of enemy
+        if self.defense_mode:
+            current_target = self.pylon[0].position
+        elif self.enemy_supply == 0 and self.combat_started:
             self.full_attack = True
             current_target = self.enemy_start_locations[0]
 
@@ -128,7 +130,6 @@ class AnglerBot(AresBot):
         #             self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
     
         ### Pylon Defense
-        # TODO Finish Pylon Defense
         if self.pylon:
             proximity_ground_enemy: Units = self.mediator.get_units_in_range(
                         start_points=[self.pylon[0].position],
@@ -138,7 +139,9 @@ class AnglerBot(AresBot):
                     )[0].filter(lambda u: not u.is_memory)
     
             if proximity_ground_enemy:
-                print("Defending Pylon")
+                self.defense_mode = True
+            else:
+                self.defense_mode = False
     def calculate_scores(self, units: Units):
         scores = {}
         for unit in units:
@@ -193,7 +196,8 @@ class AnglerBot(AresBot):
                         self.register_behavior(ranged_maneuver)
 
                 if melee:
-                    target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]
+                    # target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]
+                    target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()
                     group_maneuver.add(
                         AMoveGroup(
@@ -202,6 +206,9 @@ class AnglerBot(AresBot):
                             target=target_unit.position,
                         )
                     )
+                    if target_unit:
+                     print(f"Found target {target_unit.position}")
+                    
                     self.register_behavior(melee_maneuver)
             else:
                 group_maneuver.add(
@@ -214,70 +221,7 @@ class AnglerBot(AresBot):
                 self.register_behavior(group_maneuver)
     
         
-    # Group Behavior for range attackers
-    def control_range_attack(self, range_attack: Units, target: Point2, ground_grid: np.ndarray) -> None:
-        
-        group_maneuver: CombatManeuver = CombatManeuver()
-        squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.CONTROL_GROUP_TWO, squad_radius=9.0)
-        
-        
-
-        for squad in squads:
-            squad_position: Point2 = squad.squad_position
-            units: list[Unit] = squad.squad_units
-            squad_tags: set[int] = squad.tags
-            
-            if len(units) == 0:
-                continue
-            
-            # retreive close enemy to the range stalker squad
-            close_ground_enemy: Units = self.mediator.get_units_in_range(
-                start_points=[squad_position],
-                distances=11.5,
-                query_tree=UnitTreeQueryType.EnemyGround,
-            )[0]
-            
-            target_unit = close_ground_enemy[0] if close_ground_enemy else None
-            squad_position: Point2 = squad.squad_position
-
-            if len(self.enemy_units) > 0:
-                target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
-                print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
-            
-
-
-            #hold position for the first 20 seconds, then attack enemy start location unless there is an enemy then stutter back 
-            if target_unit:
-                """# stutter back if target_unit is in range and ready to attack unit
-                if cy_attack_ready(self, squad, target_unit):
-                    group_maneuver.add(
-                        StutterGroupBack(
-                            group=units,
-                            group_tags=squad_tags,
-                            group_position=squad_position,
-                            target=target_unit.position,
-                            grid=ground_grid,
-                        )
-                    )
-                else:"""
-                group_maneuver.add(
-                    AMoveGroup(
-                        group=units,
-                        group_tags=squad_tags,
-                        # group_position=squad_position,
-                        target=target_unit.position,
-                        # grid=ground_grid,
-                    )
-                )
-            elif self.time > 1.0:
-                group_maneuver.add(
-                    AMoveGroup(
-                        group=range_attack,
-                        group_tags={r.tag for r in range_attack},
-                        target=target,
-                    )
-                )
-            self.register_behavior(group_maneuver)
+    
         
 
     def control_scout(self, first_scout: Units, target: Point2) -> None:

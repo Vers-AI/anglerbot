@@ -89,15 +89,17 @@ class AnglerBot(AresBot):
         ground_grid = self.mediator.get_ground_grid
         
 
-        current_target: Point2 = self.defence_postion
         
         
-        # defend the pylone if we're under attack and if not and no enemies are around attack start location of enemy
+        # Control of the Current Target
         if self.defense_mode:
             current_target = self.pylon[0].position
         elif self.enemy_supply == 0 and self.combat_started:
             self.full_attack = True
             current_target = self.enemy_start_locations[0]
+        else:
+            current_target: Point2 = self.defence_postion
+
 
 
         self.control_scout(
@@ -121,13 +123,7 @@ class AnglerBot(AresBot):
                 zealot = zealots.random
                 self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
 
-        # at the start assign  all the stalkers to the range attack role
-        # if not self._assigned_range and self.time > 1.0:
-        #     self._assigned_range = True
-        #     stalkers: Units = attacker(UnitTypeId.STALKER)
-        #     if stalkers:
-        #         for stalker in stalkers:
-        #             self.mediator.assign_role(tag=stalker.tag, role=UnitRole.CONTROL_GROUP_TWO)
+       
     
         ### Pylon Defense
         if self.pylon:
@@ -142,6 +138,7 @@ class AnglerBot(AresBot):
                 self.defense_mode = True
             else:
                 self.defense_mode = False
+
     def calculate_scores(self, units: Units):
         scores = {}
         for unit in units:

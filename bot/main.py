@@ -199,7 +199,7 @@ class AnglerBot(AresBot):
                     # target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]
                     target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()
-                    group_maneuver.add(
+                    melee_maneuver.add(
                         AMoveGroup(
                             group=melee,
                             group_tags=melee_tags,

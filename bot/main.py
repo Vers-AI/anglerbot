@@ -26,6 +26,7 @@ class AnglerBot(AresBot):
         self._assigned_range: bool = False
         self.defence_postion: Point2 = None
         self.defence_stalker_position: Point2 = None
+        self.map = None
        
         ## Flags
         self.arrive: bool = False
@@ -43,8 +44,10 @@ class AnglerBot(AresBot):
             # print("No pylon found")
             return
         print(self.game_info.map_center)
+        print(f"vision blockers:{self.game_info.vision_blockers}")
         # check what map the bot is playing on
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
+            self.map = "PM"
             # find out which side of the map we are on.
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
@@ -53,6 +56,7 @@ class AnglerBot(AresBot):
                 print("Starting on the right")
                 self.defence_postion = Point2((38,26))
         else:
+            self.map = "BMA"
             print("The maps is BotMicroArena_6:", self.game_info.local_map_path)
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
@@ -84,7 +88,6 @@ class AnglerBot(AresBot):
     
         #retrieve main army if one has been assigned
         first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
-        # range_attack: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_TWO, unit_type=UnitTypeId.STALKER)
 
         ground_grid = self.mediator.get_ground_grid
         
@@ -93,23 +96,24 @@ class AnglerBot(AresBot):
         
         # Control of the Current Target
         if self.defense_mode:
-            current_target = self.pylon[0].position
+            self.defence_postion = self.pylon[0].position
+            self.defence_stalker_position = self.pylon[0].position
         elif self.enemy_supply == 0 and self.combat_started:
             self.full_attack = True
-            current_target = self.enemy_start_locations[0]
+            self.defence_postion = self.enemy_start_locations[0]
+            self.defence_stalker_position = self.enemy_start_locations[0]
         else:
+            # TODO Create condition to return to defense position set on delayed start
             current_target: Point2 = self.defence_postion
 
 
 
         self.control_scout(
             first_scout=first_scout,
-            target=current_target
         )
         
         self.control_attackers(
             attackers=attacker,
-            target=current_target
         )
 
        
@@ -147,7 +151,7 @@ class AnglerBot(AresBot):
         return scores
 
     # Set all units with ATTACKING to Center of the map
-    def control_attackers(self, attackers: Units, target: Point2) -> None:
+    def control_attackers(self, attackers: Units) -> None:
         group_maneuver: CombatManeuver = CombatManeuver()
         squads: list[UnitSquad] = self.mediator.get_squads(role=UnitRole.ATTACKING, squad_radius=12.0)
         grid: np.ndarray = self.mediator.get_ground_grid
@@ -171,15 +175,17 @@ class AnglerBot(AresBot):
 
             target_unit = close_ground_enemy[0] if close_ground_enemy else None
             squad_position: Point2 = squad.squad_position
+            
+            # breaking units into ranged and melee
+            melee: list[Unit] = [u for u in units if u.ground_range <= 3]
+            ranged: list[Unit] = [u for u in units if u.ground_range > 3]
+            melee_tags: list[int] = [u.tag for u in melee]
 
             # if len(self.enemy_units) > 0:
             #     target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
             #     print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
 
             if close_ground_enemy:
-                melee: list[Unit] = [u for u in units if u.ground_range <= 3]
-                ranged: list[Unit] = [u for u in units if u.ground_range > 3]
-                melee_tags: list[int] = [u.tag for u in melee]
                 if ranged:   
                     for unit in ranged:
                         ranged_maneuver = CombatManeuver()
@@ -203,25 +209,33 @@ class AnglerBot(AresBot):
                             target=target_unit.position,
                         )
                     )
-                    if target_unit:
-                     print(f"Found target {target_unit.position}")
                     
                     self.register_behavior(melee_maneuver)
             else:
-                group_maneuver.add(
-                    AMoveGroup(
-                        group=units,
-                        group_tags=squad_tags,
-                        target=target.position,
+                if ranged:
+                    group_maneuver.add(
+                        AMoveGroup(
+                            group=units,
+                            group_tags=squad_tags,
+                            target=self.defence_stalker_position,
+                        )
                     )
-                )
-                self.register_behavior(group_maneuver)
+                    self.register_behavior(group_maneuver)
+                if melee:
+                    group_maneuver.add(
+                        AMoveGroup(
+                            group=melee,
+                            group_tags=melee_tags,
+                            target=self.defence_postion,
+                        )
+                    )
+                    self.register_behavior(group_maneuver)
     
         
     
         
 
-    def control_scout(self, first_scout: Units, target: Point2) -> None:
+    def control_scout(self, first_scout: Units) -> None:
         #declare a new group maneuver
         group_maneuver: CombatManeuver = CombatManeuver()
        
@@ -233,6 +247,7 @@ class AnglerBot(AresBot):
         
         else:
             self.mediator.switch_roles(from_role=UnitRole.CONTROL_GROUP_ONE, to_role=UnitRole.ATTACKING)
+       
            
         
         group_maneuver.add(
@@ -242,6 +257,9 @@ class AnglerBot(AresBot):
                 target=target,
             )
         )
+        
+        # for unit in first_scout:
+        #     print(f"Scout Unit {unit.tag} Position: {unit.position}")
         
         self.register_behavior(group_maneuver)
     

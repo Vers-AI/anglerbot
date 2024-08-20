@@ -4,7 +4,7 @@ from ares import AresBot
 from ares.consts import UnitRole, UnitTreeQueryType
 from ares.behaviors.combat import CombatManeuver
 from ares.behaviors.combat.group import AMoveGroup, PathGroupToTarget
-from ares.behaviors.combat.individual import AMove, StutterUnitBack, KeepUnitSafe
+from ares.behaviors.combat.individual import AMove, StutterUnitBack, KeepUnitSafe, PathUnitToTarget
 from ares.managers.squad_manager import UnitSquad
 
 
@@ -24,7 +24,7 @@ class AnglerBot(AresBot):
 
         self._assigned_scout: bool = False
         self._assigned_range: bool = False
-        self.defence_postion: Point2 = None
+        self.defence_position: list[Point2] = []
         self.defence_stalker_position: Point2 = None
         self.map = None
        
@@ -32,6 +32,7 @@ class AnglerBot(AresBot):
         self.arrive: bool = False
         self.combat_started = False
         self.defense_mode = False
+        self.delayed = False
 
 
     def delayed_start(self):
@@ -44,37 +45,64 @@ class AnglerBot(AresBot):
             # print("No pylon found")
             return
         print(self.game_info.map_center)
-        print(f"vision blockers:{self.game_info.vision_blockers}")
+
         # check what map the bot is playing on
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
             self.map = "PM"
             # find out which side of the map we are on.
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
-                self.defence_postion = Point2((34,26))
+                self.defence_position = Point2((34,26))
             else:
                 print("Starting on the right")
-                self.defence_postion = Point2((38,26))
+                self.defence_position = Point2((38,26))
+            
         else:
             self.map = "BMA"
             print("The maps is BotMicroArena_6:", self.game_info.local_map_path)
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
-                self.defence_postion = Point2((34,36))
+                # self.defence_position = Point2((34,36))
                 self.defence_stalker_position = Point2((34,34))
             else:
                 print("Starting on the right")
-                self.defence_postion = Point2((38,36))
+                # self.defence_position = Point2((38,36))
                 self.defence_stalker_position = Point2((38,34))
+            
+            self.assign_defense_positions()
 
+        
+        self.delayed = True
+        
+
+
+
+    def assign_defense_positions(self):
+        # Get the coordinates of the vision blockers
+        vision_blockers = [
+            Point2((43, 27)),
+            Point2((28, 29)),
+            Point2((43, 26)),
+            Point2((28, 28)),
+            Point2((28, 26)),
+            Point2((43, 29)),
+            Point2((43, 28)),
+            Point2((28, 27)),
+        ]
+        # Sort vision blockers by their distance to the starting position
+        sorted_blockers = sorted(vision_blockers, key=lambda blocker: blocker.distance_to(self.pylon[0].position))
+
+        # Assign the four closest blockers to defense positions
+        self.defence_position = sorted_blockers[:4]    
+    
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
         self.pylon = self.structures(UnitTypeId.PYLON)
-        self.check_defensive_position()
+        # self.check_defensive_position()
         enemy_units: Units = self.enemy_units
         self.unit_scores = self.calculate_scores(enemy_units)
 
-        if self.defence_postion is None:
+        if not self.delayed: 
             self.delayed_start()
         
         if enemy_units:
@@ -85,32 +113,42 @@ class AnglerBot(AresBot):
 
         #retrieve all attacking units
         attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
-    
-        #retrieve main army if one has been assigned
-        first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
 
-        ground_grid = self.mediator.get_ground_grid
+        
+
         
 
         
         
         # Control of the Current Target
-        if self.defense_mode:
-            self.defence_postion = self.pylon[0].position
-            self.defence_stalker_position = self.pylon[0].position
+        if self.defense_mode and self.pylon:
+            self.current_target = self.pylon[0].position
+            self.current_target_ranged = self.pylon[0].position
         elif self.enemy_supply == 0 and self.combat_started:
             self.full_attack = True
-            self.defence_postion = self.enemy_start_locations[0]
-            self.defence_stalker_position = self.enemy_start_locations[0]
+            self.current_target = self.enemy_start_locations[0]
+            self.current_target_ranged = self.enemy_start_locations[0]
         else:
-            # TODO Create condition to return to defense position set on delayed start
-            current_target: Point2 = self.defence_postion
+            self.current_target = self.game_info.map_center # default for the melee should be adjusted if too far from range
+            self.current_target_ranged: Point2 = self.defence_stalker_position
+            
+        #set a scout if on PlateauMicro_1.SC2Map
+        if map == "PM":
+            # at the start assign 1 random zealot to the scout role
+            # This will remove them from the ATTACKING automatically
+            if not self._assigned_scout and self.time > 1.0:
+                self._assigned_scout = True
+                zealots: Units = attacker(UnitTypeId.ZEALOT)
+                if zealots:
+                    zealot = zealots.random
+                    self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
+            first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
 
+            self.control_scout(
+                first_scout=first_scout,
+            )
 
-
-        self.control_scout(
-            first_scout=first_scout,
-        )
+            
         
         self.control_attackers(
             attackers=attacker,
@@ -118,14 +156,7 @@ class AnglerBot(AresBot):
 
        
 
-        # at the start assign 1 random zealot to the scout role
-        # This will remove them from the ATTACKING automatically
-        if not self._assigned_scout and self.time > 1.0:
-            self._assigned_scout = True
-            zealots: Units = attacker(UnitTypeId.ZEALOT)
-            if zealots:
-                zealot = zealots.random
-                self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
+        
 
        
     
@@ -217,19 +248,37 @@ class AnglerBot(AresBot):
                         AMoveGroup(
                             group=units,
                             group_tags=squad_tags,
-                            target=self.defence_stalker_position,
+                            target=self.current_target_ranged,
                         )
                     )
                     self.register_behavior(group_maneuver)
+                # TODO set coniditions of when to stay in hold position and when to attack: Possible detect if enemy is on high ground, use ares mediator? 
                 if melee:
-                    group_maneuver.add(
-                        AMoveGroup(
-                            group=melee,
-                            group_tags=melee_tags,
-                            target=self.defence_postion,
+                    if not self.combat_started:
+                        for i, unit in enumerate(melee):
+                            melee_maneuver = CombatManeuver()
+                            position = self.defence_position[i % len(self.defence_position)]
+                            melee_maneuver.add(
+                                PathUnitToTarget(
+                                    unit=unit,
+                                    target=position,
+                                    grid=grid,
+                                    success_at_distance=0.0,
+                                )
+                            )
+                            self.register_behavior(melee_maneuver)
+                            unit.hold_position(queue=True)
+                    else:
+                        group_maneuver.add(
+                            AMoveGroup(
+                                group=melee,
+                                group_tags=squad_tags,
+                                target=self.current_target,
+                            )
                         )
-                    )
-                    self.register_behavior(group_maneuver)
+                        self.register_behavior(group_maneuver)
+                    
+
     
         
     
@@ -238,12 +287,11 @@ class AnglerBot(AresBot):
     def control_scout(self, first_scout: Units) -> None:
         #declare a new group maneuver
         group_maneuver: CombatManeuver = CombatManeuver()
-       
+        target = self.current_target
         #move scout to the center of the map the map if there is no enemy at the start of the game else remove the scout from the group
     
         if not self.enemy_units:
             target = self.game_info.map_center
-        
         
         else:
             self.mediator.switch_roles(from_role=UnitRole.CONTROL_GROUP_ONE, to_role=UnitRole.ATTACKING)
@@ -272,15 +320,16 @@ class AnglerBot(AresBot):
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
         
     def check_defensive_position(self):
+        # TODO check if this is necessary
         if self.arrive:
             return
         if not self.enemy_units:
             return
         # check the nearest unit to the defensive_position
-        if self.defence_postion:
-            closest_unit: Unit = self.units.closest_to(self.defence_postion)
+        if self.defence_position:
+            closest_unit: Unit = self.units.closest_to(self.defence_position)
             if closest_unit:
-                if closest_unit.distance_to(self.defence_postion) < 2:
+                if closest_unit.distance_to(self.defence_position) < 2:
                     self.arrive = True
     
     

@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Optional
 
 from ares import AresBot
@@ -30,9 +31,10 @@ class AnglerBot(AresBot):
        
         ## Flags
         self.arrive: bool = False
-        self.combat_started = False
+        self.melee_combat_started = False
         self.defense_mode = False
         self.delayed = False
+        self.launch_late_attack = False
 
 
     def delayed_start(self):
@@ -47,6 +49,7 @@ class AnglerBot(AresBot):
         print(self.game_info.map_center)
 
         # check what map the bot is playing on
+        # TODO Change conditions for Map 
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
             self.map = "PM"
             # find out which side of the map we are on.
@@ -80,13 +83,13 @@ class AnglerBot(AresBot):
     def assign_defense_positions(self):
         # Get the coordinates of the vision blockers
         vision_blockers = [
-            Point2((43, 27)),
+            Point2((44, 27)),
             Point2((28, 29)),
-            Point2((43, 26)),
+            Point2((44, 26)),
             Point2((28, 28)),
             Point2((28, 26)),
-            Point2((43, 29)),
-            Point2((43, 28)),
+            Point2((44, 29)),
+            Point2((44, 28)),
             Point2((28, 27)),
         ]
         # Sort vision blockers by their distance to the starting position
@@ -101,13 +104,13 @@ class AnglerBot(AresBot):
         # self.check_defensive_position()
         enemy_units: Units = self.enemy_units
         self.unit_scores = self.calculate_scores(enemy_units)
-
+        melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
         if not self.delayed: 
             self.delayed_start()
         
         if enemy_units:
-            self.combat_started = True
             self.enemy_supply = self.get_total_supply(enemy_units)
+            self.melee_combat_started = self.check_melee_combat_started(melee_units)
         else:
             self.enemy_supply = 0
 
@@ -116,15 +119,25 @@ class AnglerBot(AresBot):
 
         
 
-        
+        sleep(0.1)
 
         
         
         # Control of the Current Target
+        if not self.melee_combat_started and self.time > 30:
+            if self.full_attack or self.check_defensive_position():
+                self.full_attack = True
+                self.current_target = self.enemy_start_locations[0]
+                self.current_target_ranged = self.enemy_start_locations[0]
+            else:
+                self.current_target = self.defence_stalker_position
+                self.current_target_ranged = self.defence_stalker_position
         if self.defense_mode and self.pylon:
+            print("changing to defense")
             self.current_target = self.pylon[0].position
             self.current_target_ranged = self.pylon[0].position
-        elif self.enemy_supply == 0 and self.combat_started:
+        elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
+            print("changing to finishing blow")
             self.full_attack = True
             self.current_target = self.enemy_start_locations[0]
             self.current_target_ranged = self.enemy_start_locations[0]
@@ -174,12 +187,41 @@ class AnglerBot(AresBot):
             else:
                 self.defense_mode = False
 
+    def check_melee_combat_started(self, melee_units: Units) -> bool:
+        if self.melee_combat_started:
+            return True
+
+        if self.check_melee_shields(melee_units):
+            print("Melee combat started - Shield Damage", self.time_formatted)
+            return True
+        if self.check_enemy_on_high_ground(melee_units[0].position3d.z):
+            print("Melee combat started - Enemy HighGround", self.time_formatted)
+            return True
+        if self.time > 30:
+            self.launch_late_attack = True
+            return True
+        return False
+
+    #check if the enemy unit is on highround
+    def check_enemy_on_high_ground(self, zpos: float) -> bool:
+        for unit in self.enemy_units:
+            if unit.position3d.z > zpos + 0.5:
+                return True
+        return False
+
     def calculate_scores(self, units: Units):
         scores = {}
         for unit in units:
             missing_health_percent = (unit.health_max - unit.health) / unit.health_max
             scores[unit.tag] = 100 - missing_health_percent
         return scores
+    
+    def check_melee_shields(self, units: Units) -> bool:
+        # check if any of the melee units have taken any damage
+        for unit in units:
+            if unit.shield < unit.shield_max:
+                return True
+        return False
 
     # Set all units with ATTACKING to Center of the map
     def control_attackers(self, attackers: Units) -> None:
@@ -216,21 +258,47 @@ class AnglerBot(AresBot):
             #     target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
             #     print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
 
-            if close_ground_enemy:
-                if ranged:   
-                    for unit in ranged:
-                        ranged_maneuver = CombatManeuver()
-                        target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
-                        if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
-                            ranged_maneuver.add(
-                                KeepUnitSafe(unit, grid)
-                            )
-                        else:
-                            ranged_maneuver.add(StutterUnitBack(unit=unit, target=target_unit, grid=grid))
-                        self.register_behavior(ranged_maneuver)
+            # if ranged
+            if ranged:
 
-                if melee:
-                    # target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(melee[0].position) * x.distance_to(melee[0].position)), reverse=True)[0]
+                if close_ground_enemy:
+                        for unit in ranged:
+                            ranged_maneuver = CombatManeuver()
+                            target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
+                            if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
+                                ranged_maneuver.add(
+                                    KeepUnitSafe(unit, grid)
+                                )
+                            else:
+                                ranged_maneuver.add(StutterUnitBack(unit=unit, target=target_unit, grid=grid))
+                            self.register_behavior(ranged_maneuver)
+                else:
+                    group_maneuver.add(
+                        AMoveGroup(
+                            group=units,
+                            group_tags=squad_tags,
+                            target=self.current_target_ranged,
+                        )
+                    )
+                    self.register_behavior(group_maneuver)
+
+
+            if melee:
+                if not self.melee_combat_started:
+                    for i, unit in enumerate(melee):
+                        melee_maneuver = CombatManeuver()
+                        position = self.defence_position[i % len(self.defence_position)]
+                        melee_maneuver.add(
+                            PathUnitToTarget(
+                                unit=unit,
+                                target=position,
+                                grid=grid,
+                                success_at_distance=1.0,
+                            )
+                        )
+                        self.register_behavior(melee_maneuver)
+                        unit.hold_position(queue=True)
+                elif close_ground_enemy:
                     target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()
                     melee_maneuver.add(
@@ -242,41 +310,17 @@ class AnglerBot(AresBot):
                     )
                     
                     self.register_behavior(melee_maneuver)
-            else:
-                if ranged:
+                else:
                     group_maneuver.add(
                         AMoveGroup(
-                            group=units,
+                            group=melee,
                             group_tags=squad_tags,
-                            target=self.current_target_ranged,
+                            target=self.current_target,
                         )
                     )
                     self.register_behavior(group_maneuver)
-                # TODO set coniditions of when to stay in hold position and when to attack: Possible detect if enemy is on high ground, use ares mediator? 
-                if melee:
-                    if not self.combat_started:
-                        for i, unit in enumerate(melee):
-                            melee_maneuver = CombatManeuver()
-                            position = self.defence_position[i % len(self.defence_position)]
-                            melee_maneuver.add(
-                                PathUnitToTarget(
-                                    unit=unit,
-                                    target=position,
-                                    grid=grid,
-                                    success_at_distance=0.0,
-                                )
-                            )
-                            self.register_behavior(melee_maneuver)
-                            unit.hold_position(queue=True)
-                    else:
-                        group_maneuver.add(
-                            AMoveGroup(
-                                group=melee,
-                                group_tags=squad_tags,
-                                target=self.current_target,
-                            )
-                        )
-                        self.register_behavior(group_maneuver)
+
+
                     
 
     
@@ -320,17 +364,16 @@ class AnglerBot(AresBot):
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
         
     def check_defensive_position(self):
-        # TODO check if this is necessary
         if self.arrive:
             return
         if not self.enemy_units:
             return
         # check the nearest unit to the defensive_position
-        if self.defence_position:
-            closest_unit: Unit = self.units.closest_to(self.defence_position)
-            if closest_unit:
-                if closest_unit.distance_to(self.defence_position) < 2:
-                    self.arrive = True
+        if self.defence_stalker_position:
+            all_units: Unit = self.units.further_than(3, self.defence_stalker_position)
+            if all_units.empty:
+                self.arrive = True
+                return
     
     
     

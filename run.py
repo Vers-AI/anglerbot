@@ -9,6 +9,7 @@ from sc2.data import AIBuild, Difficulty, Race
 from sc2.main import run_game
 from sc2.player import Bot, Computer
 from sc2.bot_ai import BotAI
+from sc2.constants import UnitTypeId
 
 
 sys.path.append("ares-sc2/src/ares")
@@ -41,6 +42,18 @@ class DummyBot(BotAI):
         for unit in self.units.idle:
             unit.attack(target)
 
+class DefendBot(BotAI):
+    def __init__(self):
+        super().__init__()
+
+    async def on_step(self, iteration: int):
+        # await super(DefendBot, self).on_step(iteration)
+        target = self.start_location
+        if self.structures(UnitTypeId.PYLON):
+            target = self.structures(UnitTypeId.PYLON)[0]
+        for unit in self.units.idle:
+            unit.move(target)
+
 
 def main():
     bot_name: str = "MyBot"
@@ -58,7 +71,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, AnglerBot(), bot_name)
-    bot2 = Bot(Race.Random, DummyBot())
+    bot2 = Bot(Race.Random, DefendBot())
 
 
     if "--LadderServer" in sys.argv:

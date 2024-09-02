@@ -14,7 +14,7 @@ from sc2.unit import Unit
 from sc2.units import Units
 from sc2.position import Point2
 
-from cython_extensions import cy_attack_ready, cy_pick_enemy_target, cy_in_attack_range
+from cython_extensions import cy_pick_enemy_target
 
 import numpy as np
 
@@ -35,6 +35,7 @@ class AnglerBot(AresBot):
         self.defense_mode = False
         self.delayed = False
         self.launch_late_attack = False
+        
 
 
     def delayed_start(self):
@@ -83,14 +84,14 @@ class AnglerBot(AresBot):
     def assign_defense_positions(self):
         # Get the coordinates of the vision blockers
         vision_blockers = [
-            Point2((44, 27)),
-            Point2((28, 29)),
-            Point2((44, 26)),
-            Point2((28, 28)),
-            Point2((28, 26)),
-            Point2((44, 29)),
-            Point2((44, 28)),
-            Point2((28, 27)),
+            Point2((43.6, 26.25)),
+            Point2((43.6, 27.25)),
+            Point2((43.6, 28.25)),
+            Point2((43.6, 29.25)),
+            Point2((28.4, 26.25)),
+            Point2((28.4, 27.25)),
+            Point2((28.4, 28.25)),
+            Point2((28.4, 29.25)),
         ]
         # Sort vision blockers by their distance to the starting position
         sorted_blockers = sorted(vision_blockers, key=lambda blocker: blocker.distance_to(self.pylon[0].position))
@@ -116,23 +117,28 @@ class AnglerBot(AresBot):
 
         #retrieve all attacking units
         attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
+        first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE)
 
         
-
+        # TODO remove
         sleep(0.1)
 
         
-        
         # Control of the Current Target
+        # TODO modify defense position that the zealots stay in the sight blocker to draw the enemy
+        
         if not self.melee_combat_started and self.time > 30:
+            self.launch_late_attack = True
             if self.full_attack or self.check_defensive_position():
+                print("should attack from defensive position now")
                 self.full_attack = True
                 self.current_target = self.enemy_start_locations[0]
                 self.current_target_ranged = self.enemy_start_locations[0]
             else:
+                print("should circle around to attack now")
                 self.current_target = self.defence_stalker_position
                 self.current_target_ranged = self.defence_stalker_position
-        if self.defense_mode and self.pylon:
+        elif self.defense_mode and self.pylon:
             print("changing to defense")
             self.current_target = self.pylon[0].position
             self.current_target_ranged = self.pylon[0].position
@@ -145,7 +151,7 @@ class AnglerBot(AresBot):
             self.current_target = self.game_info.map_center # default for the melee should be adjusted if too far from range
             self.current_target_ranged: Point2 = self.defence_stalker_position
             
-        #set a scout if on PlateauMicro_1.SC2Map
+        # Scout controls
         if map == "PM":
             # at the start assign 1 random zealot to the scout role
             # This will remove them from the ATTACKING automatically
@@ -155,8 +161,16 @@ class AnglerBot(AresBot):
                 if zealots:
                     zealot = zealots.random
                     self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
-            first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE, unit_type=UnitTypeId.ZEALOT)
+        elif self.launch_late_attack:
+            if not self._assigned_scout:
+                self._assigned_scout = True
+                zealots: Units = attacker(UnitTypeId.ZEALOT)
+                if zealots:
+                    zealot = zealots.random
+                    self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
 
+            
+        if first_scout:
             self.control_scout(
                 first_scout=first_scout,
             )
@@ -197,9 +211,7 @@ class AnglerBot(AresBot):
         if self.check_enemy_on_high_ground(melee_units[0].position3d.z):
             print("Melee combat started - Enemy HighGround", self.time_formatted)
             return True
-        if self.time > 30:
-            self.launch_late_attack = True
-            return True
+        
         return False
 
     #check if the enemy unit is on highround
@@ -285,19 +297,29 @@ class AnglerBot(AresBot):
 
             if melee:
                 if not self.melee_combat_started:
-                    for i, unit in enumerate(melee):
-                        melee_maneuver = CombatManeuver()
-                        position = self.defence_position[i % len(self.defence_position)]
-                        melee_maneuver.add(
-                            PathUnitToTarget(
-                                unit=unit,
-                                target=position,
-                                grid=grid,
-                                success_at_distance=1.0,
+                    if self.launch_late_attack:
+                        group_maneuver.add(
+                            AMoveGroup(
+                                group=melee,
+                                group_tags=squad_tags,
+                                target=self.current_target,
+                                )
                             )
-                        )
-                        self.register_behavior(melee_maneuver)
-                        unit.hold_position(queue=True)
+                        self.register_behavior(group_maneuver)
+                    else:
+                        for i, unit in enumerate(melee):
+                            melee_maneuver = CombatManeuver()
+                            position = self.defence_position[i % len(self.defence_position)]
+                            melee_maneuver.add(
+                                PathUnitToTarget(
+                                    unit=unit,
+                                    target=position,
+                                    grid=grid,
+                                    success_at_distance=1.0,
+                                )
+                            )
+                            self.register_behavior(melee_maneuver)
+                            unit.hold_position(queue=True)
                 elif close_ground_enemy:
                     target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()
@@ -329,13 +351,11 @@ class AnglerBot(AresBot):
         
 
     def control_scout(self, first_scout: Units) -> None:
-        #declare a new group maneuver
         group_maneuver: CombatManeuver = CombatManeuver()
         target = self.current_target
-        #move scout to the center of the map the map if there is no enemy at the start of the game else remove the scout from the group
-    
+        # TODO change the sensitivity of how close the scout gets before switching roles - use get_units_in_range or something
         if not self.enemy_units:
-            target = self.game_info.map_center
+            target = self.enemy_start_locations[0]
         
         else:
             self.mediator.switch_roles(from_role=UnitRole.CONTROL_GROUP_ONE, to_role=UnitRole.ATTACKING)
@@ -363,17 +383,19 @@ class AnglerBot(AresBot):
         if unit.type_id == UnitTypeId.ZEALOT or unit.type_id == UnitTypeId.STALKER:
             self.mediator.assign_role(tag=unit.tag, role=UnitRole.ATTACKING)
         
+    ## Defensive Position
     def check_defensive_position(self):
         if self.arrive:
-            return
-        if not self.enemy_units:
-            return
+            return True
+        # TODO figure out if this is useful
+        # if not self.enemy_units:
+        #     return
         # check the nearest unit to the defensive_position
         if self.defence_stalker_position:
             all_units: Unit = self.units.further_than(3, self.defence_stalker_position)
             if all_units.empty:
                 self.arrive = True
-                return
+        return self.arrive
     
     
     

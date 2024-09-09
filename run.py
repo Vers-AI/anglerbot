@@ -71,7 +71,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, AnglerBot(), bot_name)
-    bot2 = Bot(Race.Random, DefendBot())
+    bot2 = Bot(Race.Random, DummyBot())
 
 
     if "--LadderServer" in sys.argv:
@@ -82,8 +82,8 @@ def main():
     else:
         # Local game
         map_list: List[str] = [
-             # "PlateauMicro_1",
-             "BotMicroArena_6"
+             "PlateauMicro_1",
+             # "BotMicroArena_6"
         ]
         
 

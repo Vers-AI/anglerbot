@@ -50,27 +50,27 @@ class AnglerBot(AresBot):
         print(self.game_info.map_center)
 
         # check what map the bot is playing on
-        # TODO Change conditions for Map 
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
             self.map = "PM"
             # find out which side of the map we are on.
+            # TODO - Add better starting positions for Melee and ranged
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
-                self.defence_position = Point2((34,26))
+                self.defence_stalker_position = Point2((34,34)) #Map Center
+                self.defence_position = Point2((34,26)) # random Point
             else:
                 print("Starting on the right")
-                self.defence_position = Point2((38,26))
+                self.defence_stalker_position = Point2((38,34)) #map center
+                self.defence_position = Point2((38,26)) # random Point
             
         else:
             self.map = "BMA"
             print("The maps is BotMicroArena_6:", self.game_info.local_map_path)
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
-                # self.defence_position = Point2((34,36))
                 self.defence_stalker_position = Point2((34,34))
             else:
                 print("Starting on the right")
-                # self.defence_position = Point2((38,36))
                 self.defence_stalker_position = Point2((38,34))
             
             self.assign_defense_positions()
@@ -121,29 +121,28 @@ class AnglerBot(AresBot):
 
         
         # TODO remove
-        sleep(0.1)
+        # sleep(0.1)
 
         
         # Control of the Current Target
-        # TODO modify defense position that the zealots stay in the sight blocker to draw the enemy
         
         if not self.melee_combat_started and self.time > 30:
             self.launch_late_attack = True
             if self.full_attack or self.check_defensive_position():
-                print("should attack from defensive position now")
+                # print("should attack from defensive position now")
                 self.full_attack = True
                 self.current_target = self.enemy_start_locations[0]
                 self.current_target_ranged = self.enemy_start_locations[0]
             else:
-                print("should circle around to attack now")
+                # print("should circle around to attack now")
                 self.current_target = self.defence_stalker_position
                 self.current_target_ranged = self.defence_stalker_position
         elif self.defense_mode and self.pylon:
-            print("changing to defense")
+            # print("changing to defense")
             self.current_target = self.pylon[0].position
             self.current_target_ranged = self.pylon[0].position
         elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
-            print("changing to finishing blow")
+            # print("changing to finishing blow")
             self.full_attack = True
             self.current_target = self.enemy_start_locations[0]
             self.current_target_ranged = self.enemy_start_locations[0]
@@ -307,19 +306,30 @@ class AnglerBot(AresBot):
                             )
                         self.register_behavior(group_maneuver)
                     else:
-                        for i, unit in enumerate(melee):
-                            melee_maneuver = CombatManeuver()
-                            position = self.defence_position[i % len(self.defence_position)]
-                            melee_maneuver.add(
-                                PathUnitToTarget(
-                                    unit=unit,
-                                    target=position,
-                                    grid=grid,
-                                    success_at_distance=1.0,
+                        if self.map == "BMA":
+                            for i, unit in enumerate(melee):
+                                melee_maneuver = CombatManeuver()
+                                position = self.defence_position[i % len(self.defence_position)]
+                                melee_maneuver.add(
+                                    PathUnitToTarget(
+                                        unit=unit,
+                                        target=position,
+                                        grid=grid,
+                                        success_at_distance=1.0,
+                                    )
+                                )
+                                self.register_behavior(melee_maneuver)
+                                unit.hold_position(queue=True)
+                        else:
+                            # TODO - Set a better targer (current_target investigate)
+                            group_maneuver.add(
+                                AMoveGroup(
+                                    group=melee,
+                                    group_tags=squad_tags,
+                                    target=self.current_target,
                                 )
                             )
-                            self.register_behavior(melee_maneuver)
-                            unit.hold_position(queue=True)
+                            self.register_behavior(group_maneuver)
                 elif close_ground_enemy:
                     target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()

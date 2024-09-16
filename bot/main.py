@@ -53,15 +53,27 @@ class AnglerBot(AresBot):
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
             self.map = "PM"
             # find out which side of the map we are on.
-            # TODO - Add better starting positions for Melee and ranged
+            # TODO -Adjust formation for Terran Match ups
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
-                self.defence_stalker_position = Point2((34,34)) #Map Center
-                self.defence_position = Point2((34,26)) # random Point
+                self.defence_stalker_position = self.game_info.map_center + Point2((-2, -2))
+                # self.defence_position = self.game_info.map_center  + Point2((4 , -4))
+                self.defence_position = [
+                    self.game_info.map_center + Point2((4, -5)),
+                    self.game_info.map_center + Point2((4, -4)),
+                    self.game_info.map_center + Point2((4, -3)),
+                    self.game_info.map_center + Point2((4, -2)),
+                ]
             else:
                 print("Starting on the right")
-                self.defence_stalker_position = Point2((38,34)) #map center
-                self.defence_position = Point2((38,26)) # random Point
+                self.defence_stalker_position = self.game_info.map_center + Point2((2, -2))
+                # self.defence_position = self.game_info.map_center + Point2((-4, -4))
+                self.defence_position = [
+                    self.game_info.map_center + Point2((-4, -5)),
+                    self.game_info.map_center + Point2((-4, -4)),
+                    self.game_info.map_center + Point2((-4, -3)),
+                    self.game_info.map_center + Point2((-4, -2)),
+                ]
             
         else:
             self.map = "BMA"
@@ -139,6 +151,7 @@ class AnglerBot(AresBot):
                 self.current_target_ranged = self.defence_stalker_position
         elif self.defense_mode and self.pylon:
             # print("changing to defense")
+            #todo for PM increase the sensitivity of the enemy being close to the pylon
             self.current_target = self.pylon[0].position
             self.current_target_ranged = self.pylon[0].position
         elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
@@ -273,16 +286,16 @@ class AnglerBot(AresBot):
             if ranged:
 
                 if close_ground_enemy:
-                        for unit in ranged:
-                            ranged_maneuver = CombatManeuver()
-                            target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
-                            if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
-                                ranged_maneuver.add(
-                                    KeepUnitSafe(unit, grid)
-                                )
-                            else:
-                                ranged_maneuver.add(StutterUnitBack(unit=unit, target=target_unit, grid=grid))
-                            self.register_behavior(ranged_maneuver)
+                    for unit in ranged:
+                        ranged_maneuver = CombatManeuver()
+                        target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
+                        if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
+                            ranged_maneuver.add(
+                                KeepUnitSafe(unit, grid)
+                            )
+                        else:
+                            ranged_maneuver.add(StutterUnitBack(unit=unit, target=target_unit, grid=grid))
+                        self.register_behavior(ranged_maneuver)
                 else:
                     group_maneuver.add(
                         AMoveGroup(
@@ -306,30 +319,30 @@ class AnglerBot(AresBot):
                             )
                         self.register_behavior(group_maneuver)
                     else:
-                        if self.map == "BMA":
-                            for i, unit in enumerate(melee):
-                                melee_maneuver = CombatManeuver()
-                                position = self.defence_position[i % len(self.defence_position)]
-                                melee_maneuver.add(
-                                    PathUnitToTarget(
-                                        unit=unit,
-                                        target=position,
-                                        grid=grid,
-                                        success_at_distance=1.0,
-                                    )
-                                )
-                                self.register_behavior(melee_maneuver)
-                                unit.hold_position(queue=True)
-                        else:
-                            # TODO - Set a better targer (current_target investigate)
-                            group_maneuver.add(
-                                AMoveGroup(
-                                    group=melee,
-                                    group_tags=squad_tags,
-                                    target=self.current_target,
+                        for i, unit in enumerate(melee):
+                            melee_maneuver = CombatManeuver()
+                            position = self.defence_position[i % len(self.defence_position)]
+                            melee_maneuver.add(
+                                PathUnitToTarget(
+                                    unit=unit,
+                                    target=position,
+                                    grid=grid,
+                                    success_at_distance=1.0,
                                 )
                             )
-                            self.register_behavior(group_maneuver)
+                            self.register_behavior(melee_maneuver)
+                            if self.map == "BMA":
+                                unit.hold_position(queue=True)
+                        # else:
+                        #     # TODO - Set a better targer (current_target investigate)
+                        #     group_maneuver.add(
+                        #         AMoveGroup(
+                        #             group=melee,
+                        #             group_tags=squad_tags,
+                        #             target=self.current_target,
+                        #         )
+                        #     )
+                        #     self.register_behavior(group_maneuver)
                 elif close_ground_enemy:
                     target_unit = cy_pick_enemy_target(close_ground_enemy)
                     melee_maneuver = CombatManeuver()

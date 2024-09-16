@@ -71,7 +71,7 @@ def main():
                 race = Race[config[MY_BOT_RACE].title()]
 
     bot1 = Bot(race, AnglerBot(), bot_name)
-    bot2 = Bot(Race.Random, DummyBot())
+    bot2 = Bot(Race.Protoss, DummyBot())
 
 
     if "--LadderServer" in sys.argv:

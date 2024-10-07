@@ -55,24 +55,24 @@ class AnglerBot(AresBot):
             # find out which side of the map we are on.
             # TODO -Adjust formation for Terran Match ups
             if self.game_info.map_center.x > self.pylon[0].position.x:
-                print("Starting on the left")
-                self.defence_stalker_position = self.game_info.map_center + Point2((-2, -2))
-                # self.defence_position = self.game_info.map_center  + Point2((4 , -4))
-                self.defence_position = [
-                    self.game_info.map_center + Point2((4, -5)),
-                    self.game_info.map_center + Point2((4, -4)),
-                    self.game_info.map_center + Point2((4, -3)),
-                    self.game_info.map_center + Point2((4, -2)),
-                ]
-            else:
-                print("Starting on the right")
-                self.defence_stalker_position = self.game_info.map_center + Point2((2, -2))
-                # self.defence_position = self.game_info.map_center + Point2((-4, -4))
+                print("Starting on the left - PM")
+                self.defence_stalker_position = self.game_info.map_center + Point2((-6, 0))
+                #self.defence_position = self.game_info.map_center  #+ Point2((4 , -4))
                 self.defence_position = [
                     self.game_info.map_center + Point2((-4, -5)),
                     self.game_info.map_center + Point2((-4, -4)),
                     self.game_info.map_center + Point2((-4, -3)),
                     self.game_info.map_center + Point2((-4, -2)),
+                ]
+            else:
+                print("Starting on the right - PM")
+                self.defence_stalker_position = self.game_info.map_center + Point2((6, 0))
+                # self.defence_position = self.game_info.map_center + Point2((-4, -4))
+                self.defence_position = [
+                    self.game_info.map_center + Point2((4, 3)),
+                    self.game_info.map_center + Point2((4, 2)),
+                    self.game_info.map_center + Point2((4, -3)),
+                    self.game_info.map_center + Point2((4, -2)),
                 ]
             
         else:
@@ -118,6 +118,7 @@ class AnglerBot(AresBot):
         enemy_units: Units = self.enemy_units
         self.unit_scores = self.calculate_scores(enemy_units)
         melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
+        # TODO check if delayed start is messing with self.defense position not being set before enumerating and causing 0
         if not self.delayed: 
             self.delayed_start()
         
@@ -132,8 +133,6 @@ class AnglerBot(AresBot):
         first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE)
 
         
-        # TODO remove
-        # sleep(0.1)
 
         
         # Control of the Current Target
@@ -322,6 +321,8 @@ class AnglerBot(AresBot):
                         for i, unit in enumerate(melee):
                             melee_maneuver = CombatManeuver()
                             position = self.defence_position[i % len(self.defence_position)]
+                            #position = self.game_info.map_center #debug
+                            
                             melee_maneuver.add(
                                 PathUnitToTarget(
                                     unit=unit,

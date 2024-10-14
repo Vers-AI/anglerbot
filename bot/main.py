@@ -56,23 +56,23 @@ class AnglerBot(AresBot):
             # TODO -Adjust formation for Terran Match ups
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left - PM")
-                self.defence_stalker_position = self.game_info.map_center + Point2((-6, 0))
+                self.defence_stalker_position = self.game_info.map_center + Point2((-7, 0))
                 #self.defence_position = self.game_info.map_center  #+ Point2((4 , -4))
                 self.defence_position = [
-                    self.game_info.map_center + Point2((-4, -5)),
-                    self.game_info.map_center + Point2((-4, -4)),
-                    self.game_info.map_center + Point2((-4, -3)),
-                    self.game_info.map_center + Point2((-4, -2)),
+                    self.game_info.map_center + Point2((-4, 1.5)),
+                    self.game_info.map_center + Point2((-4, 0.5)),
+                    self.game_info.map_center + Point2((-4, -1.5)),
+                    self.game_info.map_center + Point2((-4, -0.5)),
                 ]
             else:
                 print("Starting on the right - PM")
                 self.defence_stalker_position = self.game_info.map_center + Point2((6, 0))
                 # self.defence_position = self.game_info.map_center + Point2((-4, -4))
                 self.defence_position = [
-                    self.game_info.map_center + Point2((4, 3)),
-                    self.game_info.map_center + Point2((4, 2)),
-                    self.game_info.map_center + Point2((4, -3)),
-                    self.game_info.map_center + Point2((4, -2)),
+                    self.game_info.map_center + Point2((4, 1.5)),
+                    self.game_info.map_center + Point2((4, 0.5)),
+                    self.game_info.map_center + Point2((4, -1.5)),
+                    self.game_info.map_center + Point2((4, -0.5)),
                 ]
             
         else:
@@ -118,11 +118,10 @@ class AnglerBot(AresBot):
         enemy_units: Units = self.enemy_units
         self.unit_scores = self.calculate_scores(enemy_units)
         melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
-        # TODO check if delayed start is messing with self.defense position not being set before enumerating and causing 0
         if not self.delayed: 
             self.delayed_start()
         
-        if enemy_units:
+        if enemy_units: # used to track enemies for final attack
             self.enemy_supply = self.get_total_supply(enemy_units)
             self.melee_combat_started = self.check_melee_combat_started(melee_units)
         else:
@@ -136,7 +135,7 @@ class AnglerBot(AresBot):
 
         
         # Control of the Current Target
-        
+        #TODO - Set coordinate of armry to go around if Launch_late_attack is true and it on map PM
         if not self.melee_combat_started and self.time > 30:
             self.launch_late_attack = True
             if self.full_attack or self.check_defensive_position():
@@ -216,14 +215,18 @@ class AnglerBot(AresBot):
         if self.melee_combat_started:
             return True
 
-        if self.check_melee_shields(melee_units):
-            print("Melee combat started - Shield Damage", self.time_formatted)
-            return True
-        if self.check_enemy_on_high_ground(melee_units[0].position3d.z):
-            print("Melee combat started - Enemy HighGround", self.time_formatted)
-            return True
-        
+        if self.map == "BMA":
+            if self.check_melee_shields(melee_units):
+                print("Melee combat started - Shield Damage", self.time_formatted)
+                return True
+            if self.check_enemy_on_high_ground(melee_units[0].position3d.z):
+                print("Melee combat started - Enemy HighGround", self.time_formatted)
+                return True
+        else:
+            return True    
+            
         return False
+        
 
     #check if the enemy unit is on highround
     def check_enemy_on_high_ground(self, zpos: float) -> bool:
@@ -318,10 +321,10 @@ class AnglerBot(AresBot):
                             )
                         self.register_behavior(group_maneuver)
                     else:
+                        # print("Not Melee combat started")
                         for i, unit in enumerate(melee):
                             melee_maneuver = CombatManeuver()
                             position = self.defence_position[i % len(self.defence_position)]
-                            #position = self.game_info.map_center #debug
                             
                             melee_maneuver.add(
                                 PathUnitToTarget(

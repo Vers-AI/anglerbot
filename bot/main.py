@@ -134,7 +134,7 @@ class AnglerBot(AresBot):
         
 
         
-        # Control of the Current Target
+        # Current Target
         #TODO - Set coordinate of armry to go around if Launch_late_attack is true and it on map PM
         if not self.melee_combat_started and self.time > 30:
             self.launch_late_attack = True
@@ -143,17 +143,25 @@ class AnglerBot(AresBot):
                 self.full_attack = True
                 self.current_target = self.enemy_start_locations[0]
                 self.current_target_ranged = self.enemy_start_locations[0]
+                print("should attack from defensive position now")
             else:
-                # print("should circle around to attack now")
-                self.current_target = self.defence_stalker_position
-                self.current_target_ranged = self.defence_stalker_position
+                if map == "BMA":
+                    print("should circle around to attack now - BMA")
+                    self.current_target = self.defence_stalker_position
+                    self.current_target_ranged = self.defence_stalker_position
+                else:
+                    print("should circle around to attack now - PM")
+                    self.current_target = self.enemy_start_locations[0] + Point2((0, 30)) - Point2((7, 0))
+                    self.current_target_ranged = self.enemy_start_locations[0] + Point2((0, 30)) - Point2((7, 0))
+                   
+                
         elif self.defense_mode and self.pylon:
-            # print("changing to defense")
+            print("changing to defense")
             #todo for PM increase the sensitivity of the enemy being close to the pylon
             self.current_target = self.pylon[0].position
             self.current_target_ranged = self.pylon[0].position
         elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
-            # print("changing to finishing blow")
+            print("changing to finishing blow")
             self.full_attack = True
             self.current_target = self.enemy_start_locations[0]
             self.current_target_ranged = self.enemy_start_locations[0]
@@ -223,7 +231,9 @@ class AnglerBot(AresBot):
                 print("Melee combat started - Enemy HighGround", self.time_formatted)
                 return True
         else:
-            return True    
+            if self.check_melee_shields(melee_units):
+                print("Melee combat started - Shield Damage", self.time_formatted)
+                return True    
             
         return False
         
@@ -284,10 +294,23 @@ class AnglerBot(AresBot):
             #     target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(units[0].position) * x.distance_to(units[0].position)), reverse=True)[0]
             #     print("Found Best Target: {} Health: {}/{}".format(target_unit.tag, target_unit.health, target_unit.health_max))
 
-            # if ranged
+        
             if ranged:
+                if not self.melee_combat_started and self.time > 30 and self.map == "PM":
+                    group_maneuver.add(
+                        # TODO Adjust success at distance, increase danger distance, increase success threshold
+                        PathGroupToTarget(
+                            start=squad_position,
+                            group=units,
+                            group_tags=squad_tags,
+                            grid=grid,
+                            target=self.current_target_ranged,
+                        )
+                    )
+                    print(self.current_target_ranged)
+                    self.register_behavior(group_maneuver)
 
-                if close_ground_enemy:
+                elif close_ground_enemy:
                     for unit in ranged:
                         ranged_maneuver = CombatManeuver()
                         target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
@@ -311,7 +334,20 @@ class AnglerBot(AresBot):
 
             if melee:
                 if not self.melee_combat_started:
-                    if self.launch_late_attack:
+                    if self.time > 30 and self.map == "PM":
+                        # TODO Adjust success at distance, increase danger distance, increase success threshold
+                        group_maneuver.add(
+                            PathGroupToTarget(
+                                start=squad_position,
+                                group=melee,
+                                group_tags=squad_tags,
+                                grid=grid,
+                                target=self.current_target,
+                            )
+                        )
+                        print(self.current_target)
+                        self.register_behavior(group_maneuver)
+                    elif self.launch_late_attack:
                         group_maneuver.add(
                             AMoveGroup(
                                 group=melee,

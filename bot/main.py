@@ -12,7 +12,8 @@ from ares.managers.squad_manager import UnitSquad
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.unit import Unit
 from sc2.units import Units
-from sc2.position import Point2
+from sc2.position import Point2, Point3
+
 
 from cython_extensions import cy_pick_enemy_target
 
@@ -35,7 +36,12 @@ class AnglerBot(AresBot):
         self.defense_mode = False
         self.delayed = False
         self.launch_late_attack = False
-        
+    # Debug 
+    def _draw_debug_sphere_at_point(self, point: Point2):
+        height = self.get_terrain_z_height(point)  # get the height in world coordinates
+        radius = 1                                 # set the radius of the sphere
+        point3 = Point3((point.x, point.y, height))  # convert the 2D point to a 3D point
+        self._client.debug_sphere_out(point3, radius, color=Point3((255, 0, 0)))   
 
 
     def delayed_start(self):
@@ -47,7 +53,8 @@ class AnglerBot(AresBot):
         if len(self.pylon) == 0:
             # print("No pylon found")
             return
-        print(self.game_info.map_center)
+        print("center", self.game_info.map_center)
+        print("enemy pylon", self.enemy_pylon[0].position)
 
         # check what map the bot is playing on
         if self.game_info.local_map_path == "PlateauMicro_1.SC2Map":
@@ -114,12 +121,19 @@ class AnglerBot(AresBot):
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
         self.pylon = self.structures(UnitTypeId.PYLON)
-        # self.check_defensive_position()
+        self.enemy_pylon = self.enemy_structures(UnitTypeId.PYLON)
+        
+        
+        
         enemy_units: Units = self.enemy_units
         self.unit_scores = self.calculate_scores(enemy_units)
         melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
         if not self.delayed: 
             self.delayed_start()
+        
+        # self.check_defensive_position()
+        self.check_attack_position()
+        
         
         if enemy_units: # used to track enemies for final attack
             self.enemy_supply = self.get_total_supply(enemy_units)
@@ -139,10 +153,9 @@ class AnglerBot(AresBot):
         if not self.melee_combat_started and self.time > 30:
             self.launch_late_attack = True
             if self.full_attack or self.check_defensive_position():
-                # print("should attack from defensive position now")
                 self.full_attack = True
-                self.current_target = self.enemy_start_locations[0]
-                self.current_target_ranged = self.enemy_start_locations[0]
+                self.current_target = self.enemy_pylon[0].position
+                self.current_target_ranged = self.enemy_pylon[0].position
                 print("should attack from defensive position now")
             else:
                 if map == "BMA":
@@ -151,8 +164,8 @@ class AnglerBot(AresBot):
                     self.current_target_ranged = self.defence_stalker_position
                 else:
                     print("should circle around to attack now - PM")
-                    self.current_target = self.enemy_start_locations[0] + Point2((0, 30)) - Point2((7, 0))
-                    self.current_target_ranged = self.enemy_start_locations[0] + Point2((0, 30)) - Point2((7, 0))
+                    self.current_target = self.enemy_pylon[0].position
+                    self.current_target_ranged = self.enemy_pylon[0].position
                    
                 
         elif self.defense_mode and self.pylon:
@@ -163,8 +176,8 @@ class AnglerBot(AresBot):
         elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
             print("changing to finishing blow")
             self.full_attack = True
-            self.current_target = self.enemy_start_locations[0]
-            self.current_target_ranged = self.enemy_start_locations[0]
+            self.current_target = self.enemy_pylon[0].position
+            self.current_target_ranged = self.enemy_pylon[0].position
         else:
             self.current_target = self.game_info.map_center # default for the melee should be adjusted if too far from range
             self.current_target_ranged: Point2 = self.defence_stalker_position
@@ -200,7 +213,7 @@ class AnglerBot(AresBot):
         )
 
        
-
+        # sleep(0.1) #sleep timer to slow down the bot
         
 
        
@@ -296,7 +309,7 @@ class AnglerBot(AresBot):
 
         
             if ranged:
-                if not self.melee_combat_started and self.time > 30 and self.map == "PM":
+                if not (self.arrive or self.melee_combat_started) and self.map == "PM":
                     group_maneuver.add(
                         # TODO Adjust success at distance, increase danger distance, increase success threshold
                         PathGroupToTarget(
@@ -305,9 +318,13 @@ class AnglerBot(AresBot):
                             group_tags=squad_tags,
                             grid=grid,
                             target=self.current_target_ranged,
+                            success_at_distance=5.0,
+                            sense_danger=True,
+                            danger_distance=5.0,
+                            danger_threshold=0.5,
                         )
                     )
-                    print(self.current_target_ranged)
+                    # print("Ranged Target: ", self.current_target_ranged)
                     self.register_behavior(group_maneuver)
 
                 elif close_ground_enemy:
@@ -334,7 +351,7 @@ class AnglerBot(AresBot):
 
             if melee:
                 if not self.melee_combat_started:
-                    if self.time > 30 and self.map == "PM":
+                    if self.full_attack or self.arrive and self.map == "PM":
                         # TODO Adjust success at distance, increase danger distance, increase success threshold
                         group_maneuver.add(
                             PathGroupToTarget(
@@ -343,9 +360,13 @@ class AnglerBot(AresBot):
                                 group_tags=squad_tags,
                                 grid=grid,
                                 target=self.current_target,
+                                success_at_distance=5.0,
+                                danger_distance=5.0,
+                                danger_threshold=0.5,
+                                sense_danger=True,
                             )
                         )
-                        print(self.current_target)
+                        #print("Target: ", self.current_target)
                         self.register_behavior(group_maneuver)
                     elif self.launch_late_attack:
                         group_maneuver.add(
@@ -418,7 +439,7 @@ class AnglerBot(AresBot):
         target = self.current_target
         # TODO change the sensitivity of how close the scout gets before switching roles - use get_units_in_range or something
         if not self.enemy_units:
-            target = self.enemy_start_locations[0]
+            target = self.enemy_pylon[0].position
         
         else:
             self.mediator.switch_roles(from_role=UnitRole.CONTROL_GROUP_ONE, to_role=UnitRole.ATTACKING)
@@ -458,7 +479,21 @@ class AnglerBot(AresBot):
             all_units: Unit = self.units.further_than(3, self.defence_stalker_position)
             if all_units.empty:
                 self.arrive = True
+                print
         return self.arrive
+    
+    ## Attack Position
+    def check_attack_position(self):
+        if self.arrive:
+            return True
+        # check the nearest unit to enemy pylon
+        if self.enemy_pylon:
+            arrived_units: Unit = self.units.closer_than(4, self.enemy_pylon[0])
+            if arrived_units:
+                print("Arrived at Attack Position")
+                self.arrive = True
+        return self.arrive
+
     
     
     
@@ -466,3 +501,5 @@ class AnglerBot(AresBot):
              
 
     
+
+

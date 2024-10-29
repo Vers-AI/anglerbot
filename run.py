@@ -48,9 +48,11 @@ class DefendBot(BotAI):
 
     async def on_step(self, iteration: int):
         # await super(DefendBot, self).on_step(iteration)
-        target = self.start_location
         if self.structures(UnitTypeId.PYLON):
             target = self.structures(UnitTypeId.PYLON)[0]
+        else:
+            target = self.start_location
+
         for unit in self.units.idle:
             unit.move(target)
 

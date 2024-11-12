@@ -49,7 +49,6 @@ class AnglerBot(AresBot):
         self.enemy_supply: int = -1 # track enemy supply
 
 
-
         if len(self.pylon) == 0:
             # print("No pylon found")
             return
@@ -123,114 +122,119 @@ class AnglerBot(AresBot):
         self.pylon = self.structures(UnitTypeId.PYLON)
         self.enemy_pylon = self.enemy_structures(UnitTypeId.PYLON)
         
-        
-        
-        enemy_units: Units = self.enemy_units
-        self.unit_scores = self.calculate_scores(enemy_units)
-        melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
-        if not self.delayed: 
-            self.delayed_start()
-        
-        # self.check_defensive_position()
-        self.check_attack_position()
-        
-        
-        if enemy_units: # used to track enemies for final attack
-            self.enemy_supply = self.get_total_supply(enemy_units)
-            self.melee_combat_started = self.check_melee_combat_started(melee_units)
-        else:
-            self.enemy_supply = 0
+       
 
-        #retrieve all attacking units
-        attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
-        first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE)
-
+        if self.enemy_pylon:
         
+            enemy_units: Units = self.enemy_units
+            self.unit_scores = self.calculate_scores(enemy_units)
+            melee_units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING, unit_type={UnitTypeId.ZEALOT})
+            if not self.delayed: 
+                self.delayed_start()
+            
+            # self.check_defensive_position()
+            self.check_attack_position()
+            
+            
+            if enemy_units: # used to track enemies for final attack
+                self.enemy_supply = self.get_total_supply(enemy_units)
+                self.melee_combat_started = self.check_melee_combat_started(melee_units)
+            else:
+                self.enemy_supply = 0
 
-        
-        # Current Target
-        #TODO - Set coordinate of armry to go around if Launch_late_attack is true and it on map PM
-        if not self.melee_combat_started and self.time > 30:
-            self.launch_late_attack = True
-            if self.full_attack or self.check_defensive_position():
+            #retrieve all attacking units
+            attacker: Units = self.mediator.get_units_from_role(role=UnitRole.ATTACKING)
+            first_scout: Units = self.mediator.get_units_from_role(role=UnitRole.CONTROL_GROUP_ONE)
+
+            
+
+            
+            # Current Target
+            #TODO - Set coordinate of armry to go around if Launch_late_attack is true and it on map PM
+            if not self.melee_combat_started and self.time > 30:
+                self.launch_late_attack = True
+                if self.full_attack or self.check_defensive_position():
+                    self.full_attack = True
+                    self.current_target = self.enemy_pylon[0].position
+                    self.current_target_ranged = self.enemy_pylon[0].position
+                    #print("should attack from defensive position now")
+                else:
+                    if map == "BMA":
+                        #print("should circle around to attack now - BMA")
+                        self.current_target = self.defence_stalker_position
+                        self.current_target_ranged = self.defence_stalker_position
+                    else:
+                        #print("should circle around to attack now - PM")
+                        self.current_target = self.enemy_pylon[0].position
+                        self.current_target_ranged = self.enemy_pylon[0].position
+                    
+                    
+            elif self.defense_mode and self.pylon:
+                print("changing to defense")
+                #todo for PM increase the sensitivity of the enemy being close to the pylon
+                self.current_target = self.pylon[0].position
+                self.current_target_ranged = self.pylon[0].position
+            elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
+                #print("changing to finishing blow")
                 self.full_attack = True
                 self.current_target = self.enemy_pylon[0].position
                 self.current_target_ranged = self.enemy_pylon[0].position
-                print("should attack from defensive position now")
             else:
-                if map == "BMA":
-                    print("should circle around to attack now - BMA")
-                    self.current_target = self.defence_stalker_position
-                    self.current_target_ranged = self.defence_stalker_position
-                else:
-                    print("should circle around to attack now - PM")
-                    self.current_target = self.enemy_pylon[0].position
-                    self.current_target_ranged = self.enemy_pylon[0].position
-                   
+                self.current_target = self.game_info.map_center # default for the melee should be adjusted if too far from range
+                self.current_target_ranged: Point2 = self.defence_stalker_position
                 
-        elif self.defense_mode and self.pylon:
-            print("changing to defense")
-            #todo for PM increase the sensitivity of the enemy being close to the pylon
-            self.current_target = self.pylon[0].position
-            self.current_target_ranged = self.pylon[0].position
-        elif self.full_attack or (self.enemy_supply == 0 and self.melee_combat_started):
-            print("changing to finishing blow")
-            self.full_attack = True
-            self.current_target = self.enemy_pylon[0].position
-            self.current_target_ranged = self.enemy_pylon[0].position
-        else:
-            self.current_target = self.game_info.map_center # default for the melee should be adjusted if too far from range
-            self.current_target_ranged: Point2 = self.defence_stalker_position
-            
-        # Scout controls
-        if map == "PM":
-            # at the start assign 1 random zealot to the scout role
-            # This will remove them from the ATTACKING automatically
-            if not self._assigned_scout and self.time > 1.0:
-                self._assigned_scout = True
-                zealots: Units = attacker(UnitTypeId.ZEALOT)
-                if zealots:
-                    zealot = zealots.random
-                    self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
-        elif self.launch_late_attack:
-            if not self._assigned_scout:
-                self._assigned_scout = True
-                zealots: Units = attacker(UnitTypeId.ZEALOT)
-                if zealots:
-                    zealot = zealots.random
-                    self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
+            # Scout controls
+            if map == "PM":
+                # at the start assign 1 random zealot to the scout role
+                # This will remove them from the ATTACKING automatically
+                if not self._assigned_scout and self.time > 1.0:
+                    self._assigned_scout = True
+                    zealots: Units = attacker(UnitTypeId.ZEALOT)
+                    if zealots:
+                        zealot = zealots.random
+                        self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
+            elif self.launch_late_attack:
+                if not self._assigned_scout:
+                    self._assigned_scout = True
+                    zealots: Units = attacker(UnitTypeId.ZEALOT)
+                    if zealots:
+                        zealot = zealots.random
+                        self.mediator.assign_role(tag=zealot.tag, role=UnitRole.CONTROL_GROUP_ONE)
 
+                
+            if first_scout:
+                self.control_scout(
+                    first_scout=first_scout,
+                )
+
+                
             
-        if first_scout:
-            self.control_scout(
-                first_scout=first_scout,
+            self.control_attackers(
+                attackers=attacker,
             )
 
+        
+            # sleep(0.1) #sleep timer to slow down the bot
             
-        
-        self.control_attackers(
-            attackers=attacker,
-        )
 
-       
-        # sleep(0.1) #sleep timer to slow down the bot
         
-
-       
-    
-        ### Pylon Defense
-        if self.pylon:
-            proximity_ground_enemy: Units = self.mediator.get_units_in_range(
-                        start_points=[self.pylon[0].position],
-                        distances= 8.0,
-                        query_tree=UnitTreeQueryType.EnemyGround,
-                        return_as_dict=False,
-                    )[0].filter(lambda u: not u.is_memory)
-    
-            if proximity_ground_enemy:
-                self.defense_mode = True
-            else:
-                self.defense_mode = False
+        
+            ### Pylon Defense
+            if self.pylon:
+                proximity_ground_enemy: Units = self.mediator.get_units_in_range(
+                            start_points=[self.pylon[0].position],
+                            distances= 8.0,
+                            query_tree=UnitTreeQueryType.EnemyGround,
+                            return_as_dict=False,
+                        )[0].filter(lambda u: not u.is_memory)
+        
+                if proximity_ground_enemy:
+                    self.defense_mode = True
+                else:
+                    self.defense_mode = False
+        else:
+            pass
+        
 
     def check_melee_combat_started(self, melee_units: Units) -> bool:
         if self.melee_combat_started:
@@ -258,16 +262,22 @@ class AnglerBot(AresBot):
                 return True
         return False
 
-    def calculate_scores(self, units: Units):
+    def calculate_scores(self, units: Units) -> dict:
+        """Calculate health scores for each unit in the given Units object."""
         scores = {}
         for unit in units:
-            missing_health_percent = (unit.health_max - unit.health) / unit.health_max
-            scores[unit.tag] = 100 - missing_health_percent
+            missing_health = unit.health_max - unit.health
+            missing_health_percent = missing_health / unit.health_max
+            score = 100 - missing_health_percent
+            scores[unit.tag] = score
         return scores
+
     
-    def check_melee_shields(self, units: Units) -> bool:
-        # check if any of the melee units have taken any damage
-        for unit in units:
+    def check_melee_shields(self, melee_units: Units) -> bool:
+        """
+        Check if any of the melee units have taken any damage.
+        """
+        for unit in melee_units:
             if unit.shield < unit.shield_max:
                 return True
         return False
@@ -328,6 +338,7 @@ class AnglerBot(AresBot):
                     self.register_behavior(group_maneuver)
 
                 elif close_ground_enemy:
+                    # TODO - call check ramp function if false continue , if true move to safe location away from enemy or away from facing position
                     for unit in ranged:
                         ranged_maneuver = CombatManeuver()
                         target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
@@ -494,7 +505,15 @@ class AnglerBot(AresBot):
                 self.arrive = True
         return self.arrive
 
-    
+    def check_ramps(self):
+        # TODO - pass unit's positions check distance within a threshold if crossed return true
+        ramps = self.game_info.map_ramps
+        for ramp in ramps:
+            top_center = ramp.top_center
+            bottom_center = ramp.bottom_center
+            # Print the coordinates
+            print(f"Ramp top center: ({top_center.x}, {top_center.y})")
+            print(f"Ramp bottom center: ({bottom_center.x}, {bottom_center.y})")
     
     
     

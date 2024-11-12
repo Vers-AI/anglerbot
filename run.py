@@ -10,6 +10,7 @@ from sc2.main import run_game
 from sc2.player import Bot, Computer
 from sc2.bot_ai import BotAI
 from sc2.constants import UnitTypeId
+from sc2.position import Point2
 
 
 sys.path.append("ares-sc2/src/ares")
@@ -50,6 +51,7 @@ class DefendBot(BotAI):
         # await super(DefendBot, self).on_step(iteration)
         if self.structures(UnitTypeId.PYLON):
             target = self.structures(UnitTypeId.PYLON)[0]
+            # target = Point2((0,0))  #Debug for testing against pylon only victory
         else:
             target = self.start_location
 

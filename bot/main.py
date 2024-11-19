@@ -122,8 +122,6 @@ class AnglerBot(AresBot):
         self.pylon = self.structures(UnitTypeId.PYLON)
         self.enemy_pylon = self.enemy_structures(UnitTypeId.PYLON)
         
-       
-
         if self.enemy_pylon:
         
             enemy_units: Units = self.enemy_units
@@ -214,7 +212,7 @@ class AnglerBot(AresBot):
             )
 
         
-            # sleep(0.1) #sleep timer to slow down the bot
+            sleep(0.1) #sleep timer to slow down the bot
             
 
         
@@ -279,6 +277,8 @@ class AnglerBot(AresBot):
         """
         for unit in melee_units:
             if unit.shield < unit.shield_max:
+                print("Shield: {} Max: {}".format(unit.shield, unit.shield_max))
+
                 return True
         return False
 
@@ -338,11 +338,10 @@ class AnglerBot(AresBot):
                     self.register_behavior(group_maneuver)
 
                 elif close_ground_enemy:
-                    # TODO - call check ramp function if false continue , if true move to safe location away from enemy or away from facing position
                     for unit in ranged:
                         ranged_maneuver = CombatManeuver()
                         target_unit = sorted(self.enemy_units, key=lambda x: self.unit_scores[x.tag] - (x.distance_to(unit.position) * x.distance_to(unit.position)), reverse=True)[0]
-                        if unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0:
+                        if (unit.shield_health_percentage < 0.2 and unit.weapon_cooldown != 0) or self.check_ramps(unit):
                             ranged_maneuver.add(
                                 KeepUnitSafe(unit, grid)
                             )
@@ -505,16 +504,35 @@ class AnglerBot(AresBot):
                 self.arrive = True
         return self.arrive
 
-    def check_ramps(self):
-        # TODO - pass unit's positions check distance within a threshold if crossed return true
+    def check_ramps(self, inc_unit: Unit) -> bool:
         ramps = self.game_info.map_ramps
         for ramp in ramps:
-            top_center = ramp.top_center
-            bottom_center = ramp.bottom_center
-            # Print the coordinates
-            print(f"Ramp top center: ({top_center.x}, {top_center.y})")
-            print(f"Ramp bottom center: ({bottom_center.x}, {bottom_center.y})")
-    
+            # TODO check if top ramp center is visible if is visible skip
+            if self.is_visible(ramp.top_center):
+                continue
+            unit_at_bottom_of_ramp = inc_unit.position.distance_to(ramp.bottom_center) < 4
+            if not unit_at_bottom_of_ramp:
+                continue
+            # loop enemies and see if close to ramp top center
+            enemy_in_position = False
+            for enemy_unit in self.enemy_units:
+                if enemy_unit.ground_range < 2:
+                    continue
+
+                if enemy_unit.position.distance_to(ramp.top_center) < 4:
+                    return True
+            
+
+            # if enemy_in_position and inc_unit.position.distance_to(ramp.bottom_center) < 4:
+            #     print("Triggered Ramp Check: {}".format(inc_unit.position.distance_to(ramp.bottom_center)))
+            #     return True
+
+            # top_center = ramp.top_center
+            # bottom_center = ramp.bottom_center
+            # # Print the coordinates
+            # print(f"Ramp top center: ({top_center.x}, {top_center.y})")
+            # print(f"Ramp bottom center: ({bottom_center.x}, {bottom_center.y})")
+        return False
     
     
              

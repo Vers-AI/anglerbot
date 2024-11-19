@@ -212,7 +212,7 @@ class AnglerBot(AresBot):
             )
 
         
-            sleep(0.1) #sleep timer to slow down the bot
+            # sleep(0.1) #sleep timer to slow down the bot
             
 
         

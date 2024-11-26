@@ -28,6 +28,7 @@ class AnglerBot(AresBot):
         self._assigned_range: bool = False
         self.defence_position: list[Point2] = []
         self.defence_stalker_position: Point2 = None
+        self.defence_stalker_position_2: Point2 = None
         self.map = None
        
         ## Flags
@@ -35,7 +36,6 @@ class AnglerBot(AresBot):
         self.melee_combat_started = False
         self.defense_mode = False
         self.delayed = False
-        self.second_phase_position = False
         self.launch_late_attack = False
 
     # Debug 
@@ -89,9 +89,11 @@ class AnglerBot(AresBot):
             if self.game_info.map_center.x > self.pylon[0].position.x:
                 print("Starting on the left")
                 self.defence_stalker_position = Point2((34,34))
+                self.defence_stalker_position_2 = Point2((38,34))
             else:
                 print("Starting on the right")
                 self.defence_stalker_position = Point2((38,34))
+                self.defence_stalker_position_2 = Point2((34,34))
             
             self.assign_defense_positions()
 
@@ -114,10 +116,10 @@ class AnglerBot(AresBot):
             Point2((28.4, 29.25)),
         ]
         # Sort vision blockers by their distance to the starting position
-        sorted_blockers = sorted(vision_blockers, key=lambda blocker: blocker.distance_to(self.pylon[0].position))
+        self.sorted_blockers = sorted(vision_blockers, key=lambda blocker: blocker.distance_to(self.pylon[0].position))
 
         # Assign the four closest blockers to defense positions
-        self.defence_position = sorted_blockers[:4]    
+        self.defence_position = self.sorted_blockers[:4]    
     
     async def on_step(self, iteration: int):
         await super(AnglerBot, self).on_step(iteration)
@@ -167,10 +169,12 @@ class AnglerBot(AresBot):
                         #print("should circle around to attack now - PM")
                         self.current_target = self.enemy_pylon[0].position
                         self.current_target_ranged = self.enemy_pylon[0].position
-            # elif not self.melee_combat_started and 20 < self.time < 40:
-            #     self.second_phase_position = True
-            #     self.current_target
-            #     self.defence_position = sorted_blockers[4:8]        
+            elif not self.melee_combat_started and 20 < self.time < 40 and self.map == "BMA":
+                self.defence_position= self.sorted_blockers[4:8]
+                self.current_target = self.defence_position
+                self.current_target_ranged = self.defence_stalker_position_2
+                print(f"current target: {self.current_target_ranged}")
+                  
                     
             elif self.defense_mode and self.pylon:
                 print("changing to defense")

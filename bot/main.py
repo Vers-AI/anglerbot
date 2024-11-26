@@ -35,7 +35,9 @@ class AnglerBot(AresBot):
         self.melee_combat_started = False
         self.defense_mode = False
         self.delayed = False
+        self.second_phase_position = False
         self.launch_late_attack = False
+
     # Debug 
     def _draw_debug_sphere_at_point(self, point: Point2):
         height = self.get_terrain_z_height(point)  # get the height in world coordinates
@@ -149,7 +151,7 @@ class AnglerBot(AresBot):
             
             # Current Target
             #TODO - Set coordinate of armry to go around if Launch_late_attack is true and it on map PM
-            if not self.melee_combat_started and self.time > 30:
+            if not self.melee_combat_started and self.time > 40:
                 self.launch_late_attack = True
                 if self.full_attack or self.check_defensive_position():
                     self.full_attack = True
@@ -165,7 +167,10 @@ class AnglerBot(AresBot):
                         #print("should circle around to attack now - PM")
                         self.current_target = self.enemy_pylon[0].position
                         self.current_target_ranged = self.enemy_pylon[0].position
-                    
+            # elif not self.melee_combat_started and 20 < self.time < 40:
+            #     self.second_phase_position = True
+            #     self.current_target
+            #     self.defence_position = sorted_blockers[4:8]        
                     
             elif self.defense_mode and self.pylon:
                 print("changing to defense")
@@ -215,10 +220,8 @@ class AnglerBot(AresBot):
             # sleep(0.1) #sleep timer to slow down the bot
             
 
-        
-        
             ### Pylon Defense
-            if self.pylon:
+            if self.pylon and iteration >= 10:
                 proximity_ground_enemy: Units = self.mediator.get_units_in_range(
                             start_points=[self.pylon[0].position],
                             distances= 8.0,
@@ -228,6 +231,7 @@ class AnglerBot(AresBot):
         
                 if proximity_ground_enemy:
                     self.defense_mode = True
+
                 else:
                     self.defense_mode = False
         else:
@@ -300,7 +304,7 @@ class AnglerBot(AresBot):
             # retreive close enemy to the attacking squad
             close_ground_enemy: Units = self.mediator.get_units_in_range(
                     start_points=[squad_position],
-                    distances=15,
+                    distances= 8.0,
                     query_tree=UnitTreeQueryType.EnemyGround,
                     return_as_dict=False,
                 )[0].filter(lambda u: not u.is_memory and not u.is_structure)
@@ -507,7 +511,6 @@ class AnglerBot(AresBot):
     def check_ramps(self, inc_unit: Unit) -> bool:
         ramps = self.game_info.map_ramps
         for ramp in ramps:
-            # TODO check if top ramp center is visible if is visible skip
             if self.is_visible(ramp.top_center):
                 continue
             unit_at_bottom_of_ramp = inc_unit.position.distance_to(ramp.bottom_center) < 4

@@ -5,4 +5,4 @@ Authors:
 Drekken
 Dogtato
 Mindme
-VersusAI - Channel Mob aka Hivemind
+VersusAI - Channel Mob 

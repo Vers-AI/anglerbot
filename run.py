@@ -86,7 +86,7 @@ def main():
     else:
         # Local game
         map_list: List[str] = [
-             #"PlateauMicro_1",
+             "PlateauMicro_1",
              "BotMicroArena_6"
         ]
         
